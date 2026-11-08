@@ -15,7 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import kotlin.random.Random
 
-// 테스트ㅋ
+// 테스트ㅋㅋ
 object Palette {
     val bg = Color(0xFF0B0F12)
     val surface = Color(0xFF161D22)
