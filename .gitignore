@@ -1,0 +1,30 @@
+# Gradle / 빌드 결과물
+.gradle/
+.kotlin/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+output-metadata.json
+
+# 컴퓨터마다 다른 설정 (SDK·Java 경로)
+local.properties
+
+# Android Studio 개인 설정
+.idea/
+*.iml
+.navigation/
+
+# 서명 키 (절대 올리지 않기)
+*.jks
+*.keystore
+keystore.properties
+
+# 로그·임시 파일
+*.log
+*.hprof
+
+# macOS
+.DS_Store
