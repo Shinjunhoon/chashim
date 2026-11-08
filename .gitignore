@@ -28,3 +28,6 @@ keystore.properties
 
 # macOS
 .DS_Store
+
+# Google Services (API 키가 들어 있음)
+google-services.json
