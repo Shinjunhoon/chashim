@@ -9,18 +9,18 @@
 
   | 장면 | 4D 효과 |
   |---|---|
-  | 안개 낀 숲 | 바람 1단, 23°C |
-  | 빗방울 | 와이퍼 4초, 바람 2단 |
-  | 폭우 | 바람 3단, 22°C, 번개 플래시 |
-  | 처마 밑 | 시트 열선 1단계, 24°C |
-  | 비 그친 뒤 | 열선 끄기, 창문 10% |
+  | 안개 낀 숲 | 바람 1단, 23°C, 무드등 초록 |
+  | 빗방울 | 와이퍼 4초, 바람 2단, 무드등 파랑 |
+  | 폭우 | 바람 3단, 22°C, 무드등 남색, 번개 때 화면과 무드등이 하얗게 번쩍 |
+  | 처마 밑 | 시트 열선 1단계, 24°C, 무드등 주황 |
+  | 비 그친 뒤 | 열선 끄기, 창문 10%, 무드등 노랑 |
 
 - **안전 규칙**
   - P단에서만 시작
   - 기어가 바뀌면 즉시 정지
   - 창문은 최대 20%
   - 바람과 온도는 천천히 변경
-  - 끝나거나 멈추면 시작 전 설정으로 복구
+  - 끝나거나 멈추면 시작 전 설정(바람, 온도, 열선, 창문, 무드등)으로 복구
 
 ## 개발 환경 설정
 
@@ -78,8 +78,8 @@ adb shell am start -n com.chashim.app/.MainActivity --es cmd start   # 세션 �
 adb shell am start -n com.chashim.app/.MainActivity --es cmd stop    # 정지 후 복구
 ```
 
-## 영상·소리 넣기
-아래 경로에 파일을 넣으면 앱이 자동으로 재생합니다. 파일이 없으면 앱이 그린 빗줄기 화면이 대신 나옵니다.
+## 영상·소리
+영상과 소리 파일은 저장소에 들어 있습니다. 바꾸고 싶으면 아래 경로에 같은 이름으로 넣습니다. 파일을 넣으면 앱이 자동으로 재생합니다. 파일이 없으면 앱이 그린 빗줄기 화면이 대신 나옵니다.
 
 ```
 app/src/main/assets/rain_forest/
@@ -116,3 +116,16 @@ app/src/main/java/com/chashim/app/
   - 열선: 0~3단계 (좌석 4곳)
   - 창문: 0~10
   - 와이퍼: OFF / CONTINUOUS_LEVEL_1 / CONTINUOUS_LEVEL_3 / AUTO
+  - 무드등: 색은 0xRRGGBB 정수로 주고받습니다. 권한은 `CAR_LIGHTS`, `CONTROL_CAR_LIGHTS`가 필요합니다. 버추얼 콘솔 화면의 실내 조명 색에도 반영됩니다.
+
+## 사용한 영상·소리 출처
+- 영상 (Pexels 무료 라이선스)
+  - 01: https://www.pexels.com/video/a-foggy-day-in-the-forest-4296589/
+  - 02: https://www.pexels.com/video/raindrops-falling-on-leaves-9080287/
+  - 03: https://www.pexels.com/video/heavy-rain-falling-on-green-trees-14213651/
+  - 04: https://www.pexels.com/video/raining-drops-falling-from-the-roof-6252550/
+  - 05: https://www.pexels.com/video/sunlight-passing-through-trees-5535406/
+- 소리 (Pixabay 콘텐츠 라이선스)
+  - rain_light: https://pixabay.com/sound-effects/nature-light-rain-109591/
+  - rain_heavy: https://pixabay.com/sound-effects/nature-heavy-rain-thunder-145345/
+  - birds: https://pixabay.com/sound-effects/nature-birds-forest-nature-445379/
