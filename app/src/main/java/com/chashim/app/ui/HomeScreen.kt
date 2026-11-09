@@ -17,6 +17,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +42,10 @@ fun HomeScreen(
     onStart: () -> Unit,
 ) {
     val parked = gear == VehicleGear.GEAR_PARK
+    // 충전구를 꽂으면 안내창을 띄운다. "나중에"를 누르면 다음 충전 때까지 숨긴다
+    var dismissed by remember { mutableStateOf(false) }
+    LaunchedEffect(charging) { if (!charging) dismissed = false }
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -63,14 +72,6 @@ fun HomeScreen(
         }
 
         Spacer(Modifier.height(32.dp))
-        if (charging) {
-            Text(
-                "충전하는 동안 잠깐 쉬어 볼까요?",
-                color = Palette.accent, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(12.dp))
-        }
-
         // 테마 카드
         Box(
             Modifier
@@ -90,7 +91,7 @@ fun HomeScreen(
                 Text(theme.subtitle, color = Color.White.copy(alpha = 0.75f), fontSize = 20.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "바람 · 온도 · 시트 열선 · 와이퍼 · 창문이 장면에 맞춰 움직여요",
+                    "바람 · 온도 · 시트 열선 · 와이퍼 · 창문 · 무드등이 장면에 맞춰 움직여요",
                     color = Color.White.copy(alpha = 0.6f), fontSize = 17.sp,
                 )
             }
@@ -106,6 +107,56 @@ fun HomeScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Palette.bg),
             ) {
                 Text("시작하기", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    if (charging && ready && parked && !dismissed) {
+        ChargePrompt(battery = battery, onStart = onStart, onLater = { dismissed = true })
+    }
+    }
+}
+
+@Composable
+private fun ChargePrompt(battery: Int?, onStart: () -> Unit, onLater: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .width(640.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Palette.surface)
+                .padding(40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("⚡", fontSize = 56.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("충전을 시작했어요", color = Palette.text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                battery?.let { "지금 $it% · 목표 ${com.chashim.app.engine.CHARGE_TARGET}%" } ?: "충전 중",
+                color = Palette.accent, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("기다리는 동안 비 오는 숲에서 쉬어 갈까요?", color = Palette.muted, fontSize = 20.sp)
+            Text("충전이 끝나면 알아서 마무리해 드려요", color = Palette.muted, fontSize = 18.sp)
+            Spacer(Modifier.height(28.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Button(
+                    onClick = onLater,
+                    modifier = Modifier.height(64.dp).width(200.dp),
+                    shape = RoundedCornerShape(32.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Palette.bg, contentColor = Palette.text),
+                ) { Text("나중에", fontSize = 20.sp) }
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.height(64.dp).width(240.dp),
+                    shape = RoundedCornerShape(32.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Palette.bg),
+                ) { Text("쉬기 시작", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
             }
         }
     }

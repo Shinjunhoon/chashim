@@ -106,6 +106,17 @@ class VehicleGateway(context: Context) {
         runCatching { ev.registerEvBatteryStateOfCharge(socListener) }
     }
 
+    /** 앱이 켜질 때 공조 등이 아직 준비 안 돼 못 받은 정보가 있으면 다시 받는다 */
+    suspend fun refreshCapabilitiesIfMissing() {
+        val c = caps
+        if (c.fanArea == null || c.tempArea == null || c.seatArea == null || c.windowArea == null ||
+            c.wiperArea == null || c.ambientArea == null
+        ) {
+            caps = loadCapabilities()
+            Log.i(TAG, "capabilities (reloaded): $caps")
+        }
+    }
+
     fun release() {
         runCatching { gear.unregisterGearSelection(gearListener) }
         runCatching { ev.unregisterEvChargePortOpen(chargeListener) }

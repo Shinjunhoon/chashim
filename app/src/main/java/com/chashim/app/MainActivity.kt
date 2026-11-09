@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
                         phase = p,
                         effects = engine.effects.collectAsState().value,
                         flash = engine.flash.collectAsState().value,
+                        charging = vehicle.charging.collectAsState().value,
+                        battery = vehicle.battery.collectAsState().value,
                         onStop = { engine.stop() },
                     )
                 }
