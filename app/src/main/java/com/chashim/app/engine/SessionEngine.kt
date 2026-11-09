@@ -28,6 +28,9 @@ data class EffectState(
     val seatHeat: Int? = null,
     val windowPercent: Int? = null,
     val wiper: Boolean = false,
+    /** 무드등 색 (0xRRGGBB)과 이름 */
+    val ambient: Int? = null,
+    val ambientName: String? = null,
     /** 방금 바뀐 항목. 패널에서 강조 표시한다 */
     val lastChanged: String? = null,
 )
@@ -74,6 +77,7 @@ class SessionEngine(
                 _effects.value = EffectState(
                     fan = snapshot?.fan, temp = snapshot?.temp, seatHeat = snapshot?.seatHeat,
                     windowPercent = snapshot?.window?.let { toPercent(it) },
+                    ambient = snapshot?.ambientColor,
                 )
                 vehicle.setPower(true)
                 startGuard()
@@ -169,7 +173,22 @@ class SessionEngine(
                     }
                 }
             }
-            is Effect.Flash -> _flash.update { it + 1 }
+            is Effect.Flash -> {
+                _flash.update { it + 1 }
+                // 무드등도 번개처럼 잠깐 하얗게
+                val back = _effects.value.ambient
+                if (back != null && vehicle.setAmbientColor(0xFFFFFF) != null) {
+                    try {
+                        delay(250)
+                    } finally {
+                        withContext(NonCancellable) { vehicle.setAmbientColor(back) }
+                    }
+                }
+            }
+            is Effect.Ambient ->
+                vehicle.setAmbientColor(e.color)?.let { r ->
+                    _effects.update { it.copy(ambient = r, ambientName = e.name, lastChanged = "ambient") }
+                }
         }
     }
 

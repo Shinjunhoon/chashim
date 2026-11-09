@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -116,6 +117,10 @@ fun PlayerScreen(
             EffectRow("💺", "시트 열선", effects.seatHeat?.let { if (it == 0) "꺼짐" else "${it}단계" }, effects.lastChanged == "seat")
             EffectRow("🪟", "창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it% 열림" }, effects.lastChanged == "window")
             EffectRow("🌧️", "와이퍼", if (effects.wiper) "작동 중" else "멈춤", effects.lastChanged == "wiper" && effects.wiper)
+            EffectRow(
+                "💡", "무드등", effects.ambientName ?: effects.ambient?.let { "켜짐" }, effects.lastChanged == "ambient",
+                swatch = effects.ambient?.let { Color(0xFF000000 or it.toLong()) },
+            )
             Spacer(Modifier.weight(1f))
             Text("기어를 바꾸면 바로 멈추고 원래 설정으로 돌아가요", color = Palette.muted, fontSize = 14.sp)
             Button(
@@ -130,7 +135,7 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun EffectRow(icon: String, label: String, value: String?, highlight: Boolean) {
+private fun EffectRow(icon: String, label: String, value: String?, highlight: Boolean, swatch: Color? = null) {
     val bg by animateColorAsState(if (highlight) Palette.accent.copy(alpha = 0.25f) else Palette.surface, tween(600), label = "row")
     Row(
         Modifier
@@ -143,6 +148,11 @@ private fun EffectRow(icon: String, label: String, value: String?, highlight: Bo
         Text(icon, fontSize = 24.sp)
         Spacer(Modifier.width(12.dp))
         Text(label, color = Palette.muted, fontSize = 19.sp, modifier = Modifier.weight(1f))
+        if (swatch != null) {
+            val c by animateColorAsState(swatch, tween(800), label = "swatch")
+            Box(Modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c))
+            Spacer(Modifier.width(10.dp))
+        }
         Text(value ?: "—", color = Palette.text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
     }
 }

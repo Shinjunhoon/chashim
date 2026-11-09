@@ -11,10 +11,12 @@
     <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
     <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
     <!-- 제어 -->
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />
     <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
     <uses-permission android:name="pleos.car.permission.CONTROL_CAR_SEATS" />
     <uses-permission android:name="pleos.car.permission.CONTROL_CAR_WINDOWS" />
     <uses-permission android:name="pleos.car.permission.CONTROL_WINDSHIELD_WIPERS" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_LIGHTS" />
 
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
