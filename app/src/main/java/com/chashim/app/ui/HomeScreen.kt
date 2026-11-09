@@ -39,6 +39,7 @@ fun HomeScreen(
     gear: VehicleGear?,
     charging: Boolean,
     battery: Int?,
+    charge: com.chashim.app.engine.ChargeEstimate?,
     onStart: () -> Unit,
 ) {
     val parked = gear == VehicleGear.GEAR_PARK
@@ -111,13 +112,13 @@ fun HomeScreen(
         }
     }
     if (charging && ready && parked && !dismissed) {
-        ChargePrompt(battery = battery, onStart = onStart, onLater = { dismissed = true })
+        ChargePrompt(battery = battery, charge = charge, onStart = onStart, onLater = { dismissed = true })
     }
     }
 }
 
 @Composable
-private fun ChargePrompt(battery: Int?, onStart: () -> Unit, onLater: () -> Unit) {
+private fun ChargePrompt(battery: Int?, charge: com.chashim.app.engine.ChargeEstimate?, onStart: () -> Unit, onLater: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -141,8 +142,11 @@ private fun ChargePrompt(battery: Int?, onStart: () -> Unit, onLater: () -> Unit
                 color = Palette.accent, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(6.dp))
-            Text("기다리는 동안 비 오는 숲에서 쉬어 갈까요?", color = Palette.muted, fontSize = 20.sp)
-            Text("충전이 끝나면 알아서 마무리해 드려요", color = Palette.muted, fontSize = 18.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(chargeLine(charge), color = Palette.text, fontSize = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("충전이 끝나는 시간에 맞춰 비 오는 숲에서 쉬어 갈까요?", color = Palette.muted, fontSize = 20.sp)
+            Text("충전이 끝날 때쯤 비가 그치고 햇살이 비쳐요", color = Palette.muted, fontSize = 18.sp)
             Spacer(Modifier.height(28.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(

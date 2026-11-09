@@ -58,6 +58,7 @@ fun PlayerScreen(
     charging: Boolean,
     battery: Int?,
     climate: com.chashim.app.engine.ClimateAdapt?,
+    charge: com.chashim.app.engine.ChargeEstimate?,
     onStop: () -> Unit,
 ) {
     val playing = phase as? SessionPhase.Playing
@@ -109,24 +110,29 @@ fun PlayerScreen(
             Text("4D 효과", color = Palette.muted, fontSize = 18.sp)
             Text(theme.title, color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             if (playing != null) {
-                val done = theme.scenes.take(playing.sceneIndex).sumOf { it.durationSec } + playing.elapsedSec
-                LinearProgressIndicator(
-                    progress = { done / theme.totalSec.toFloat() },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Palette.accent,
-                )
-                Text("장면 ${playing.sceneIndex + 1}/${theme.scenes.size} · 남은 시간 ${formatSec(theme.totalSec - done)}",
-                    color = Palette.muted, fontSize = 16.sp)
+                val total = playing.sessionTotal
+                if (total != null && total > 0) {
+                    LinearProgressIndicator(
+                        progress = { (playing.sessionElapsed / total.toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Palette.accent,
+                    )
+                    Text("${sceneLabel(scene)} · 남은 시간 ${formatSec((total - playing.sessionElapsed).coerceAtLeast(0))}",
+                        color = Palette.muted, fontSize = 16.sp)
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Palette.accent)
+                    Text("${sceneLabel(scene)} · 충전 속도를 재는 중", color = Palette.muted, fontSize = 16.sp)
+                }
             }
             if (charging && battery != null) {
-                ChargeBar(battery)
+                ChargeBar(battery, charge)
             }
             if (climate != null) {
                 ClimateCard(climate)
             }
             Spacer(Modifier.height(4.dp))
-            EffectRow("🌬️", "바람", effects.fan?.let { "${it}단" }, effects.lastChanged == "fan")
-            EffectRow("🌡️", "온도", effects.temp?.let { "%.1f°C".format(it) }, effects.lastChanged == "temp")
+            EffectRow("🌬️", if (effects.gust) "바람 · 돌풍!" else "바람", effects.fan?.let { "${it}단" }, effects.gust)
+            EffectRow("🌡️", "에어컨 설정", effects.temp?.let { "%.1f°C".format(it) }, false)
             EffectRow("💺", "시트 열선", effects.seatHeat?.let { if (it == 0) "꺼짐" else "${it}단계" }, effects.lastChanged == "seat")
             EffectRow("🪟", "창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it% 열림" }, effects.lastChanged == "window")
             EffectRow("🌧️", "와이퍼", if (effects.wiper) "작동 중" else "멈춤", effects.lastChanged == "wiper" && effects.wiper)
@@ -193,7 +199,7 @@ private fun ClimateCard(c: com.chashim.app.engine.ClimateAdapt) {
 
 /** 충전 진행 (현재 % → 목표 %) */
 @Composable
-private fun ChargeBar(battery: Int) {
+private fun ChargeBar(battery: Int, charge: com.chashim.app.engine.ChargeEstimate?) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -212,7 +218,7 @@ private fun ChargeBar(battery: Int) {
             color = Palette.accent,
         )
         Spacer(Modifier.height(6.dp))
-        Text("목표에 도달하면 부드럽게 마무리해요", color = Palette.muted, fontSize = 14.sp)
+        Text(chargeLine(charge), color = Palette.muted, fontSize = 14.sp)
     }
 }
 
@@ -306,6 +312,22 @@ private fun hasAsset(path: String?): Boolean {
         (context.assets.list(dir)?.map { "$dir/$it" }?.toSet() ?: emptySet()).also { assetIndex = it }
     }
     return path in index
+}
+
+private fun sceneLabel(scene: Scene?) = scene?.let {
+    when (it.role) {
+        com.chashim.app.engine.SceneRole.INTRO -> "도입"
+        com.chashim.app.engine.SceneRole.MIDDLE -> "휴식"
+        com.chashim.app.engine.SceneRole.OUTRO -> "마무리"
+    }
+} ?: ""
+
+/** "완료까지 약 7분 · 50kW" */
+fun chargeLine(c: com.chashim.app.engine.ChargeEstimate?): String {
+    val left = c?.remainingSec ?: return "충전 속도를 재고 있어요 (약 20초)"
+    val min = ((left + 59) / 60).coerceAtLeast(1)
+    val kw = c.rateKw?.let { " · %.0fkW%s".format(it, if (c.assumed) " 가정" else "") } ?: ""
+    return "완료까지 약 ${min}분$kw"
 }
 
 private fun formatSec(sec: Int) = "%d:%02d".format(sec / 60, sec % 60)

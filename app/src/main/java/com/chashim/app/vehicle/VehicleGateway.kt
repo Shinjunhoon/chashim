@@ -8,6 +8,7 @@ import ai.pleos.playground.vehicle.constant.area.WindowValue
 import ai.pleos.playground.vehicle.constant.control.VehicleGear
 import ai.pleos.playground.vehicle.constant.control.WiperSwitch
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
+import ai.pleos.playground.vehicle.listener.EvBatteryLevelListener
 import ai.pleos.playground.vehicle.listener.EvBatteryStateOfChargeListener
 import ai.pleos.playground.vehicle.listener.EvChargePortOpenListener
 import ai.pleos.playground.vehicle.listener.GearSelectionListener
@@ -81,6 +82,14 @@ class VehicleGateway(context: Context) {
     private val _battery = MutableStateFlow<Int?>(null)
     val battery: StateFlow<Int?> = _battery.asStateFlow()
 
+    /** 배터리에 들어 있는 에너지 (Wh). 충전 속도를 잴 때 쓴다 */
+    private val _energyWh = MutableStateFlow<Float?>(null)
+    val energyWh: StateFlow<Float?> = _energyWh.asStateFlow()
+
+    /** 배터리 전체 용량 (Wh) */
+    var capacityWh: Float? = null
+        private set
+
     private val gearListener = object : GearSelectionListener {
         override fun onSelected(gear: VehicleGear?) { _gear.value = gear }
         override fun onFailed(e: Exception) = warn("기어 감지", e)
@@ -88,6 +97,10 @@ class VehicleGateway(context: Context) {
     private val chargeListener = object : EvChargePortOpenListener {
         override fun onEvChargePortOpenUpdated(open: Boolean?) { _charging.value = open == true }
         override fun onFailed(e: Exception) = warn("충전구 감지", e)
+    }
+    private val levelListener = object : EvBatteryLevelListener {
+        override fun onEvBatteryLevelUpdated(wh: Float?) { _energyWh.value = wh }
+        override fun onFailed(e: Exception) = warn("배터리 에너지 감지", e)
     }
     private val socListener = object : EvBatteryStateOfChargeListener {
         override fun onEvBatteryStateOfChargeUpdated(soc: Int?) { _battery.value = soc }
@@ -103,9 +116,13 @@ class VehicleGateway(context: Context) {
         _gear.value = call { ok, fail -> gear.getCurrentGearSelectionState(ok, fail) }
         _charging.value = call { ok, fail -> ev.isEvChargePortOpen(ok, fail) } == true
         _battery.value = call { ok, fail -> ev.getEvBatteryStateOfCharge(ok, fail) }
+        _energyWh.value = call { ok, fail -> ev.getEvBatteryLevel(ok, fail) }
+        capacityWh = call { ok, fail -> ev.getEvBatteryCapacity(ok, fail) }
+        Log.i(TAG, "battery ${_battery.value}% energy ${_energyWh.value}Wh capacity ${capacityWh}Wh")
         runCatching { gear.registerGearSelection(gearListener) }
         runCatching { ev.registerEvChargePortOpen(chargeListener) }
         runCatching { ev.registerEvBatteryStateOfCharge(socListener) }
+        runCatching { ev.registerEvBatteryLevel(levelListener) }
     }
 
     /** 앱이 켜질 때 공조 등이 아직 준비 안 돼 못 받은 정보가 있으면 다시 받는다 */
@@ -123,6 +140,7 @@ class VehicleGateway(context: Context) {
         runCatching { gear.unregisterGearSelection(gearListener) }
         runCatching { ev.unregisterEvChargePortOpen(chargeListener) }
         runCatching { ev.unregisterEvBatteryStateOfCharge(socListener) }
+        runCatching { ev.unregisterEvBatteryLevel(levelListener) }
         vehicle.release()
     }
 
@@ -204,6 +222,9 @@ class VehicleGateway(context: Context) {
     suspend fun setPower(on: Boolean): Boolean? = caps.powerArea?.let { a ->
         call { ok, fail -> hvac.setHvacPower(a, on, { _, v -> ok(v) }, fail) }
     }
+
+    /** 바람 세기를 범위 안으로 */
+    fun clampFan(level: Int) = level.coerceIn(caps.fanMin, caps.fanMax)
 
     suspend fun setFan(level: Int): Int? = caps.fanArea?.let { a ->
         val v = level.coerceIn(caps.fanMin, caps.fanMax)

@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             vehicle.start()
             ready.value = true
+            engine.watchCharging()
         }
 
         setContent {
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
                         gear = vehicle.gearState.collectAsState().value,
                         charging = vehicle.charging.collectAsState().value,
                         battery = vehicle.battery.collectAsState().value,
+                        charge = engine.charge.collectAsState().value,
                         onStart = { engine.start(RainForest) },
                     )
                     is SessionPhase.Finished -> FinishScreen(reason = p.reason, onHome = engine::reset)
@@ -54,6 +56,7 @@ class MainActivity : ComponentActivity() {
                         charging = vehicle.charging.collectAsState().value,
                         battery = vehicle.battery.collectAsState().value,
                         climate = engine.climate.collectAsState().value,
+                        charge = engine.charge.collectAsState().value,
                         onStop = { engine.stop() },
                     )
                 }
@@ -70,6 +73,11 @@ class MainActivity : ComponentActivity() {
             android.util.Log.i("Chashim", "cabin override ${engine.cabinOverride}")
         }
         if (intent.getBooleanExtra("cabin_reset", false)) engine.cabinOverride = null
+        // 테스트용: 충전 속도 가정 (--ef charge_kw 50), 해제 (--ef charge_kw 0)
+        if (intent.hasExtra("charge_kw")) {
+            engine.assumedChargeKw = intent.getFloatExtra("charge_kw", 0f).takeIf { it > 0f }
+            android.util.Log.i("Chashim", "charge kW override ${engine.assumedChargeKw}")
+        }
         when (intent.getStringExtra("cmd")) {
             // 차 정보를 다 받은 뒤에 시작한다. 그래야 시작 전 설정을 저장하고 나중에 복구할 수 있다.
             "start" -> lifecycleScope.launch { ready.first { it }; engine.start(RainForest) }
