@@ -16,12 +16,21 @@ sealed interface Effect {
     data class Wiper(override val at: Int, val seconds: Int = 4) : Effect
     /** 번개 같은 화면 플래시 (무드등도 하얗게 번쩍) */
     data class Flash(override val at: Int) : Effect
+    /**
+     * 돌풍: 운전자가 맞춘 바람 세기보다 plus단 세게 seconds초 불고 원래대로 돌아간다.
+     * 에어컨 온도와 평소 바람은 운전자 설정을 그대로 둔다.
+     */
+    data class Gust(override val at: Int, val plus: Int, val seconds: Int) : Effect
     /** 실내 무드등 색 (0xRRGGBB) */
     data class Ambient(override val at: Int, val color: Int, val name: String) : Effect
 }
 
+/** 장면의 역할. 충전 중에는 중간 장면을 충전 완료 시간에 맞춰 반복한다 */
+enum class SceneRole { INTRO, MIDDLE, OUTRO }
+
 data class Scene(
     val id: String,
+    val role: SceneRole,
     val title: String,
     val caption: String,
     /** assets 안 영상 경로. 파일이 없으면 앱이 그리는 비 화면으로 대신한다 */
@@ -46,67 +55,64 @@ data class Theme(
 }
 
 /**
- * 힐링 모드 "비 오는 숲" (1차 시연용, 약 3분).
- * 효과 설계는 개발절차서 4.2 기준: 송풍 1→2단, 22~24°C, 처마에서 열선 1, 비 그친 뒤 창문 10%,
- * 빗줄기 시작 시 와이퍼 짧게, 천둥 번개 플래시.
+ * 힐링 모드 "비 오는 숲".
+ * - 충전 중이 아니면: 다섯 장면을 한 번 (약 3분)
+ * - 충전 중이면: 도입 → (폭우 ↔ 처마 밑) 반복 → 충전 완료 시점에 "비가 그쳤어요"
+ * 에어컨 온도는 건드리지 않는다. 바람은 돌풍으로만, 따뜻함은 시트 열선으로 표현한다.
  */
 val RainForest = Theme(
     id = "rain_forest",
     title = "비 오는 숲",
-    subtitle = "머리가 복잡할 때 · 3분",
+    subtitle = "머리가 복잡할 때 · 충전 시간에 맞춰",
     scenes = listOf(
         Scene(
-            id = "mist", title = "안개 낀 숲", caption = "숨을 천천히 쉬어 보세요",
+            id = "mist", role = SceneRole.INTRO, title = "안개 낀 숲", caption = "숨을 천천히 쉬어 보세요",
             video = "rain_forest/01_mist.mp4", audio = "rain_forest/birds.mp3",
             durationSec = 30, glow = 0xFF2E5E4E, rain = 0f,
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x3FB37A, name = "숲 초록"),
-                Effect.Fan(at = 0, level = 1, rampSec = 3),
-                Effect.Temp(at = 0, celsius = 23f),
             ),
         ),
         Scene(
-            id = "raindrops", title = "빗방울이 떨어지기 시작해요", caption = "앞유리에도 비가 내려요",
+            id = "raindrops", role = SceneRole.INTRO, title = "빗방울이 떨어지기 시작해요", caption = "앞유리에도 비가 내려요",
             video = "rain_forest/02_raindrops.mp4", audio = "rain_forest/rain_light.mp3",
             durationSec = 35, glow = 0xFF1E4D5B, rain = 0.35f,
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x3A8FD0, name = "비 파랑"),
                 Effect.Wiper(at = 3, seconds = 4),
-                Effect.Fan(at = 5, level = 2),
+                Effect.Gust(at = 8, plus = 1, seconds = 6),
             ),
         ),
         Scene(
-            id = "heavy_rain", title = "숲에 비가 쏟아져요", caption = "빗소리에 생각을 흘려보내세요",
+            id = "heavy_rain", role = SceneRole.MIDDLE, title = "숲에 비가 쏟아져요", caption = "빗소리에 생각을 흘려보내세요",
             video = "rain_forest/03_heavy_rain.mp4", audio = "rain_forest/rain_heavy.mp3",
             durationSec = 40, glow = 0xFF1E3A4D, rain = 1f,
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x2A3FA0, name = "깊은 남색"),
-                Effect.Fan(at = 0, level = 3),
-                Effect.Temp(at = 0, celsius = 22f),
+                Effect.Gust(at = 1, plus = 2, seconds = 8),
+                Effect.Wiper(at = 4, seconds = 5),
                 Effect.Flash(at = 18),
                 Effect.Flash(at = 19),
+                Effect.Gust(at = 19, plus = 3, seconds = 4),
             ),
         ),
         Scene(
-            id = "eaves", title = "처마 밑에서 몸을 녹여요", caption = "시트가 따뜻해져요",
+            id = "eaves", role = SceneRole.MIDDLE, title = "처마 밑에서 몸을 녹여요", caption = "시트가 따뜻해져요",
             video = "rain_forest/04_eaves.mp4", audio = "rain_forest/rain_light.mp3",
             durationSec = 40, glow = 0xFF5B3A1E, rain = 0.5f,
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0xFF8A2A, name = "따뜻한 주황"),
-                Effect.Fan(at = 0, level = 1),
                 Effect.SeatHeat(at = 2, level = 1),
-                Effect.Temp(at = 2, celsius = 24f),
             ),
         ),
         Scene(
-            id = "after_rain", title = "비가 그쳤어요", caption = "창문을 살짝 열어 맑은 공기를 들여요",
+            id = "after_rain", role = SceneRole.OUTRO, title = "비가 그쳤어요", caption = "창문을 살짝 열어 맑은 공기를 들여요",
             video = "rain_forest/05_sunlight.mp4", audio = "rain_forest/birds.mp3",
             durationSec = 35, glow = 0xFF6B8F3A, rain = 0f,
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0xFFD45A, name = "햇살 노랑"),
                 Effect.SeatHeat(at = 0, level = 0),
                 Effect.Window(at = 3, percent = 10),
-                Effect.Temp(at = 3, celsius = 23f),
             ),
         ),
     ),
