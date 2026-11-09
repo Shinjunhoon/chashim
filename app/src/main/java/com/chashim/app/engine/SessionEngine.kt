@@ -7,6 +7,8 @@ import com.chashim.app.vehicle.VehicleGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -108,19 +110,23 @@ class SessionEngine(
         }
     }
 
-    private suspend fun playScene(index: Int, scene: Scene) {
+    /**
+     * 효과는 이 장면의 자식 작업으로 실행한다.
+     * 세션이 멈추면 진행 중인 효과도 함께 멈춘 뒤에 복구가 시작된다.
+     * 따로 실행하면 복구가 끝난 뒤에도 효과가 차 설정을 덮어쓴다.
+     */
+    private suspend fun playScene(index: Int, scene: Scene) = coroutineScope {
         Log.i(TAG, "scene ${scene.id}")
         val pending = scene.effects.sortedBy { it.at }.toMutableList()
-        val effectJobs = mutableListOf<Job>()
         for (sec in 0 until scene.durationSec) {
             _phase.value = SessionPhase.Playing(index, sec)
             while (pending.isNotEmpty() && pending.first().at <= sec) {
                 val e = pending.removeAt(0)
-                effectJobs += scope.launch { run(e) }
+                launch { run(e) }
             }
             delay(1_000)
         }
-        effectJobs.forEach { it.cancel() }
+        coroutineContext.cancelChildren()
     }
 
     private suspend fun run(e: Effect) {

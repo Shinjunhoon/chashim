@@ -15,6 +15,7 @@ import com.chashim.app.ui.HomeScreen
 import com.chashim.app.ui.PlayerScreen
 import com.chashim.app.vehicle.VehicleGateway
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -61,7 +62,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         when (intent.getStringExtra("cmd")) {
-            "start" -> engine.start(RainForest)
+            // 차 정보를 다 받은 뒤에 시작한다. 그래야 시작 전 설정을 저장하고 나중에 복구할 수 있다.
+            "start" -> lifecycleScope.launch { ready.first { it }; engine.start(RainForest) }
             "stop" -> engine.stop()
             "home" -> engine.reset()
         }
