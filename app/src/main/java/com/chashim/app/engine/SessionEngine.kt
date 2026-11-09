@@ -62,6 +62,13 @@ class SessionEngine(
     private val _effects = MutableStateFlow(EffectState())
     val effects: StateFlow<EffectState> = _effects.asStateFlow()
 
+    /** 실내 온도에 맞춰 조절한 내용 (세션마다 새로 판단) */
+    private val _climate = MutableStateFlow<ClimateAdapt?>(null)
+    val climate: StateFlow<ClimateAdapt?> = _climate.asStateFlow()
+
+    /** 테스트용: 실내 온도를 이 값으로 가정한다 (null이면 차에서 읽은 값) */
+    var cabinOverride: Float? = null
+
     /** 화면 플래시 신호 (값이 바뀔 때마다 한 번 번쩍) */
     private val _flash = MutableStateFlow(0)
     val flash: StateFlow<Int> = _flash.asStateFlow()
@@ -78,6 +85,11 @@ class SessionEngine(
             try {
                 _phase.value = SessionPhase.Preparing
                 vehicle.refreshCapabilitiesIfMissing()
+                // 실내 온도를 읽고 효과를 맞춘다
+                val cabin = cabinOverride ?: vehicle.cabinTemp()
+                val (adapted, adapt) = adaptToCabin(theme, cabin)
+                _climate.value = adapt
+                Log.i(TAG, "cabin $cabin → ${adapt?.feel}")
                 snapshot = vehicle.snapshot()
                 _effects.value = EffectState(
                     fan = snapshot?.fan, temp = snapshot?.temp, seatHeat = snapshot?.seatHeat,
@@ -86,7 +98,7 @@ class SessionEngine(
                 )
                 vehicle.setPower(true)
                 startGuard()
-                theme.scenes.forEachIndexed { i, scene -> playScene(i, scene) }
+                adapted.scenes.forEachIndexed { i, scene -> playScene(i, scene) }
             } finally {
                 guardJob?.cancel()
                 withContext(NonCancellable) {

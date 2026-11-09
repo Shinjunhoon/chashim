@@ -57,6 +57,7 @@ fun PlayerScreen(
     flash: Int,
     charging: Boolean,
     battery: Int?,
+    climate: com.chashim.app.engine.ClimateAdapt?,
     onStop: () -> Unit,
 ) {
     val playing = phase as? SessionPhase.Playing
@@ -74,6 +75,10 @@ fun PlayerScreen(
             SceneVideo(scene)
             RainCanvas(intensity = if (hasAsset(scene?.video)) 0f else scene?.rain ?: 0f, modifier = Modifier.fillMaxSize())
             FlashOverlay(flash)
+            // 시작하고 8초 동안 실내 온도 판단 결과를 영상 위에 보여 준다
+            if (climate != null && playing != null && playing.sceneIndex == 0 && playing.elapsedSec < 8) {
+                ClimateBanner(climate, Modifier.align(Alignment.TopStart).padding(32.dp))
+            }
 
             if (scene != null) {
                 Column(
@@ -116,6 +121,9 @@ fun PlayerScreen(
             if (charging && battery != null) {
                 ChargeBar(battery)
             }
+            if (climate != null) {
+                ClimateCard(climate)
+            }
             Spacer(Modifier.height(4.dp))
             EffectRow("🌬️", "바람", effects.fan?.let { "${it}단" }, effects.lastChanged == "fan")
             EffectRow("🌡️", "온도", effects.temp?.let { "%.1f°C".format(it) }, effects.lastChanged == "temp")
@@ -136,6 +144,50 @@ fun PlayerScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.surface, contentColor = Palette.text),
             ) { Text("그만 쉬기", fontSize = 20.sp) }
         }
+    }
+}
+
+private fun feelIcon(c: com.chashim.app.engine.ClimateAdapt) = when (c.feel) {
+    com.chashim.app.engine.CabinFeel.COLD -> "🥶"
+    com.chashim.app.engine.CabinFeel.HOT -> "🥵"
+    com.chashim.app.engine.CabinFeel.COMFORT -> "🙂"
+}
+
+/** 영상 위 안내: 실내 온도를 보고 어떻게 맞췄는지 */
+@Composable
+private fun ClimateBanner(c: com.chashim.app.engine.ClimateAdapt, modifier: Modifier) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(feelIcon(c), fontSize = 36.sp)
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text(c.message, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            Text(c.detail, color = Color.White.copy(alpha = 0.75f), fontSize = 18.sp)
+        }
+    }
+}
+
+/** 4D 패널: 실내 온도 맞춤 */
+@Composable
+private fun ClimateCard(c: com.chashim.app.engine.ClimateAdapt) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Palette.surface)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${feelIcon(c)} 실내 온도 맞춤", color = Palette.text, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Text("%.1f°C".format(c.cabin), color = Palette.accent, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(c.detail, color = Palette.muted, fontSize = 14.sp)
     }
 }
 
