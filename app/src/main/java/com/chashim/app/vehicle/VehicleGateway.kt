@@ -39,6 +39,8 @@ data class Capabilities(
     /** 이 차가 지원하는 와이퍼 작동 모드 중 가장 약한 것 */
     val wiperOn: WiperSwitch? = null,
     val ambientArea: SeatArea? = null,
+    /** 실내 현재 온도를 읽을 위치 */
+    val cabinArea: SeatArea? = null,
 )
 
 /** 세션 시작 전 차 상태. 끝나면 이 값으로 되돌린다. */
@@ -169,6 +171,9 @@ class VehicleGateway(context: Context) {
         call<List<SeatArea>> { ok, fail ->
             light.checkAmbientLightBrightnessColorCapabilities({ _, list -> ok(list) }, fail)
         }?.firstOrNull()?.let { c = c.copy(ambientArea = it) }
+        call<List<SeatArea>> { ok, fail ->
+            hvac.checkHvacTemperatureCurrentCapabilities({ _, list -> ok(list) }, fail)
+        }?.let { list -> c = c.copy(cabinArea = list.firstOrNull { it == SeatArea(SeatValue.ROW_1_LEFT) } ?: list.firstOrNull()) }
         return c
     }
 
@@ -224,6 +229,11 @@ class VehicleGateway(context: Context) {
     suspend fun setWiper(on: Boolean): WiperSwitch? = caps.wiperArea?.let { a ->
         val v = if (on) caps.wiperOn ?: return null else WiperSwitch.OFF
         call { ok, fail -> wiper.setWiperSwitch(a, v, { _, r -> ok(r) }, fail) }
+    }
+
+    /** 실내 현재 온도 (°C). 차가 지원하지 않으면 null */
+    suspend fun cabinTemp(): Float? = caps.cabinArea?.let { a ->
+        call { ok, fail -> hvac.getHvacTemperatureCurrent(a, TemperatureUnit.CELSIUS, ok, fail) }
     }
 
     /** 무드등 색 (0xRRGGBB) */

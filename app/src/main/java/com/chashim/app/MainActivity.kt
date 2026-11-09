@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                         flash = engine.flash.collectAsState().value,
                         charging = vehicle.charging.collectAsState().value,
                         battery = vehicle.battery.collectAsState().value,
+                        climate = engine.climate.collectAsState().value,
                         onStop = { engine.stop() },
                     )
                 }
@@ -63,6 +64,12 @@ class MainActivity : ComponentActivity() {
     /** 시연·테스트용: adb shell am start -n com.chashim.app/.MainActivity --es cmd start|stop */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        // 테스트용: 실내 온도 가정 (--ef cabin 28), 해제 (--ez cabin_reset true)
+        if (intent.hasExtra("cabin")) {
+            engine.cabinOverride = intent.getFloatExtra("cabin", 0f)
+            android.util.Log.i("Chashim", "cabin override ${engine.cabinOverride}")
+        }
+        if (intent.getBooleanExtra("cabin_reset", false)) engine.cabinOverride = null
         when (intent.getStringExtra("cmd")) {
             // 차 정보를 다 받은 뒤에 시작한다. 그래야 시작 전 설정을 저장하고 나중에 복구할 수 있다.
             "start" -> lifecycleScope.launch { ready.first { it }; engine.start(RainForest) }

@@ -21,6 +21,18 @@
   - 목표 %에 도달하거나 충전기를 분리하면 세션을 마무리하고 설정을 복구합니다.
   - 시험: 버추얼 콘솔 EV Battery에서 Charge Port를 Open으로, SOC를 72 → 80으로 바꿉니다.
 
+- **실내 온도 맞춤**
+  - 시작할 때 실내 현재 온도(`getHvacTemperatureCurrent`)를 읽고 효과를 조절합니다.
+
+    | 실내 온도 | 조절 |
+    |---|---|
+    | 20°C 이하 (쌀쌀함) | 설정 온도 +1.5°C, 첫 장면부터 열선, 처마 밑 열선 2단계, 바람 약하게 |
+    | 26°C 이상 (더움) | 설정 온도 −2°C, 바람 한 단계 세게, 열선 끄기 |
+    | 그 사이 | 기본값 |
+
+  - 판단 결과를 영상 위와 4D 패널에 보여 줍니다. 예: "차 안이 19°C로 쌀쌀해서 따뜻하게 맞췄어요"
+  - 에뮬레이터 실내 온도는 19.1°C로 고정이라, 더운 경우는 테스트 명령으로 확인합니다.
+
 - **안전 규칙**
   - P단에서만 시작
   - 기어가 바뀌면 즉시 정지
@@ -82,6 +94,8 @@ adb forward tcp:8088 tcp:8088
 ```bash
 adb shell am start -n com.chashim.app/.MainActivity --es cmd start   # 세션 시작
 adb shell am start -n com.chashim.app/.MainActivity --es cmd stop    # 정지 후 복구
+adb shell am start -n com.chashim.app/.MainActivity --ef cabin 28 --es cmd start   # 실내 28°C라고 가정하고 시작
+adb shell am start -n com.chashim.app/.MainActivity --ez cabin_reset true          # 가정 해제 (차 값 사용)
 ```
 
 ## 영상·소리
