@@ -55,6 +55,8 @@ fun PlayerScreen(
     phase: SessionPhase,
     effects: EffectState,
     flash: Int,
+    charging: Boolean,
+    battery: Int?,
     onStop: () -> Unit,
 ) {
     val playing = phase as? SessionPhase.Playing
@@ -111,6 +113,9 @@ fun PlayerScreen(
                 Text("장면 ${playing.sceneIndex + 1}/${theme.scenes.size} · 남은 시간 ${formatSec(theme.totalSec - done)}",
                     color = Palette.muted, fontSize = 16.sp)
             }
+            if (charging && battery != null) {
+                ChargeBar(battery)
+            }
             Spacer(Modifier.height(4.dp))
             EffectRow("🌬️", "바람", effects.fan?.let { "${it}단" }, effects.lastChanged == "fan")
             EffectRow("🌡️", "온도", effects.temp?.let { "%.1f°C".format(it) }, effects.lastChanged == "temp")
@@ -122,7 +127,7 @@ fun PlayerScreen(
                 swatch = effects.ambient?.let { Color(0xFF000000 or it.toLong()) },
             )
             Spacer(Modifier.weight(1f))
-            Text("기어를 바꾸면 바로 멈추고 원래 설정으로 돌아가요", color = Palette.muted, fontSize = 14.sp)
+            Text(if (charging) "충전기를 뽑거나 기어를 바꾸면 바로 마무리하고 원래 설정으로 돌아가요" else "기어를 바꾸면 바로 멈추고 원래 설정으로 돌아가요", color = Palette.muted, fontSize = 14.sp)
             Button(
                 onClick = onStop,
                 enabled = phase is SessionPhase.Playing,
@@ -131,6 +136,31 @@ fun PlayerScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.surface, contentColor = Palette.text),
             ) { Text("그만 쉬기", fontSize = 20.sp) }
         }
+    }
+}
+
+/** 충전 진행 (현재 % → 목표 %) */
+@Composable
+private fun ChargeBar(battery: Int) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Palette.accent.copy(alpha = 0.12f))
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🔋 충전 중", color = Palette.text, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Text("$battery% → ${com.chashim.app.engine.CHARGE_TARGET}%", color = Palette.accent, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { (battery / com.chashim.app.engine.CHARGE_TARGET.toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            color = Palette.accent,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text("목표에 도달하면 부드럽게 마무리해요", color = Palette.muted, fontSize = 14.sp)
     }
 }
 

@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,6 +21,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TAG = "Chashim"
+
+/** 충전 목표 (%). SDK로 차의 충전 한도를 읽을 수 없어서 급속충전 권장값을 쓴다 */
+const val CHARGE_TARGET = 80
 
 /** 4D 효과 패널에 보여 줄 현재 차 상태 (차가 '성공'이라고 답한 값만 반영) */
 data class EffectState(
@@ -73,6 +77,7 @@ class SessionEngine(
         job = scope.launch {
             try {
                 _phase.value = SessionPhase.Preparing
+                vehicle.refreshCapabilitiesIfMissing()
                 snapshot = vehicle.snapshot()
                 _effects.value = EffectState(
                     fan = snapshot?.fan, temp = snapshot?.temp, seatHeat = snapshot?.seatHeat,
@@ -102,13 +107,36 @@ class SessionEngine(
         if (job?.isActive != true) _phase.value = SessionPhase.Idle
     }
 
-    /** 실행 조건 감시: 기어가 P가 아니면 즉시 정지 */
+    /**
+     * 실행 조건 감시
+     * - 기어가 P가 아니면 즉시 정지
+     * - 충전 중에 시작했다면: 충전기를 뽑거나 목표 %에 도달하면 마무리
+     */
     private fun startGuard() {
         guardJob = scope.launch {
-            vehicle.gearState.collect { g ->
-                if (g != null && g != VehicleGear.GEAR_PARK) {
-                    Log.i(TAG, "gear changed to $g → stop")
-                    stop("기어가 바뀌어 안전하게 멈췄어요")
+            launch {
+                vehicle.gearState.collect { g ->
+                    if (g != null && g != VehicleGear.GEAR_PARK) {
+                        Log.i(TAG, "gear changed to $g → stop")
+                        stop("기어가 바뀌어 안전하게 멈췄어요")
+                    }
+                }
+            }
+            if (vehicle.charging.value) {
+                val startSoc = vehicle.battery.value
+                launch {
+                    combine(vehicle.charging, vehicle.battery) { c, soc -> c to soc }.collect { (c, soc) ->
+                        when {
+                            !c -> {
+                                Log.i(TAG, "charge port closed → finish")
+                                stop("충전기를 분리했어요. 출발 준비가 됐어요")
+                            }
+                            soc != null && soc >= CHARGE_TARGET && (startSoc == null || startSoc < CHARGE_TARGET) -> {
+                                Log.i(TAG, "charge target reached ($soc%) → finish")
+                                stop("충전이 끝났어요 ($soc%). 출발하셔도 돼요")
+                            }
+                        }
+                    }
                 }
             }
         }
