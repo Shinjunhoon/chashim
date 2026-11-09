@@ -29,7 +29,7 @@ fun FinishScreen(reason: String, onHome: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text(reason, color = Palette.muted, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
-        Text("바람 · 온도 · 열선 · 창문을 시작 전 설정으로 되돌렸어요", color = Palette.accent, fontSize = 20.sp)
+        Text("바람 · 온도 · 열선 · 창문 · 무드등을 시작 전 설정으로 되돌렸어요", color = Palette.accent, fontSize = 20.sp)
         Spacer(Modifier.height(40.dp))
         Button(
             onClick = onHome,

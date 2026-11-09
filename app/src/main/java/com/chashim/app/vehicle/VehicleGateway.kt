@@ -38,6 +38,7 @@ data class Capabilities(
     val wiperArea: WindowArea? = null,
     /** 이 차가 지원하는 와이퍼 작동 모드 중 가장 약한 것 */
     val wiperOn: WiperSwitch? = null,
+    val ambientArea: SeatArea? = null,
 )
 
 /** 세션 시작 전 차 상태. 끝나면 이 값으로 되돌린다. */
@@ -47,6 +48,8 @@ data class Snapshot(
     val temp: Float?,
     val seatHeat: Int?,
     val window: Int?,
+    /** 무드등 색 (0xRRGGBB) */
+    val ambientColor: Int?,
 )
 
 /**
@@ -62,6 +65,7 @@ class VehicleGateway(context: Context) {
     private val wiper = vehicle.getWiper()
     private val gear = vehicle.getGear()
     private val ev = vehicle.getEvBattery()
+    private val light = vehicle.getLight()
 
     var caps = Capabilities()
         private set
@@ -151,6 +155,9 @@ class VehicleGateway(context: Context) {
                 Log.i(TAG, "wiper supported: $supported → use $on")
                 c = c.copy(wiperArea = a, wiperOn = on)
             }
+        call<List<SeatArea>> { ok, fail ->
+            light.checkAmbientLightBrightnessColorCapabilities({ _, list -> ok(list) }, fail)
+        }?.firstOrNull()?.let { c = c.copy(ambientArea = it) }
         return c
     }
 
@@ -162,6 +169,7 @@ class VehicleGateway(context: Context) {
         temp = caps.tempArea?.let { a -> call { ok, fail -> hvac.getHvacTemperature(a, TemperatureUnit.CELSIUS, ok, fail) } },
         seatHeat = caps.seatArea?.let { a -> call { ok, fail -> seat.getHvacSeatTemperature(a, ok, fail) } },
         window = caps.windowArea?.let { a -> call { ok, fail -> window.getCurrentWindowPosition(a, ok, fail) } },
+        ambientColor = caps.ambientArea?.let { a -> call { ok, fail -> light.getAmbientLightBrightnessColor(a, ok, fail) } },
     ).also { Log.i(TAG, "snapshot: $it") }
 
     suspend fun restore(s: Snapshot) {
@@ -171,6 +179,7 @@ class VehicleGateway(context: Context) {
         s.temp?.let { setTemp(it) }
         s.fan?.let { setFan(it) }
         setWiper(false)
+        s.ambientColor?.let { setAmbientColor(it) }
         s.power?.let { setPower(it) }
     }
 
@@ -204,6 +213,11 @@ class VehicleGateway(context: Context) {
     suspend fun setWiper(on: Boolean): WiperSwitch? = caps.wiperArea?.let { a ->
         val v = if (on) caps.wiperOn ?: return null else WiperSwitch.OFF
         call { ok, fail -> wiper.setWiperSwitch(a, v, { _, r -> ok(r) }, fail) }
+    }
+
+    /** 무드등 색 (0xRRGGBB) */
+    suspend fun setAmbientColor(rgb: Int): Int? = caps.ambientArea?.let { a ->
+        call { ok, fail -> light.setAmbientLightBrightnessColor(a, rgb and 0xFFFFFF, { _, r -> ok(r) }, fail) }
     }
 
     // ---- 공통 ----

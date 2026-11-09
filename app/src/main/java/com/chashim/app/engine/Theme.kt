@@ -14,8 +14,10 @@ sealed interface Effect {
     data class Window(override val at: Int, val percent: Int) : Effect
     /** 와이퍼를 seconds초 동안만 짧게 작동 */
     data class Wiper(override val at: Int, val seconds: Int = 4) : Effect
-    /** 번개 같은 화면 플래시 */
+    /** 번개 같은 화면 플래시 (무드등도 하얗게 번쩍) */
     data class Flash(override val at: Int) : Effect
+    /** 실내 무드등 색 (0xRRGGBB) */
+    data class Ambient(override val at: Int, val color: Int, val name: String) : Effect
 }
 
 data class Scene(
@@ -58,6 +60,7 @@ val RainForest = Theme(
             video = "rain_forest/01_mist.mp4", audio = "rain_forest/birds.mp3",
             durationSec = 30, glow = 0xFF2E5E4E, rain = 0f,
             effects = listOf(
+                Effect.Ambient(at = 0, color = 0x3FB37A, name = "숲 초록"),
                 Effect.Fan(at = 0, level = 1, rampSec = 3),
                 Effect.Temp(at = 0, celsius = 23f),
             ),
@@ -67,6 +70,7 @@ val RainForest = Theme(
             video = "rain_forest/02_raindrops.mp4", audio = "rain_forest/rain_light.mp3",
             durationSec = 35, glow = 0xFF1E4D5B, rain = 0.35f,
             effects = listOf(
+                Effect.Ambient(at = 0, color = 0x3A8FD0, name = "비 파랑"),
                 Effect.Wiper(at = 3, seconds = 4),
                 Effect.Fan(at = 5, level = 2),
             ),
@@ -76,6 +80,7 @@ val RainForest = Theme(
             video = "rain_forest/03_heavy_rain.mp4", audio = "rain_forest/rain_heavy.mp3",
             durationSec = 40, glow = 0xFF1E3A4D, rain = 1f,
             effects = listOf(
+                Effect.Ambient(at = 0, color = 0x2A3FA0, name = "깊은 남색"),
                 Effect.Fan(at = 0, level = 3),
                 Effect.Temp(at = 0, celsius = 22f),
                 Effect.Flash(at = 18),
@@ -87,6 +92,7 @@ val RainForest = Theme(
             video = "rain_forest/04_eaves.mp4", audio = "rain_forest/rain_light.mp3",
             durationSec = 40, glow = 0xFF5B3A1E, rain = 0.5f,
             effects = listOf(
+                Effect.Ambient(at = 0, color = 0xFF8A2A, name = "따뜻한 주황"),
                 Effect.Fan(at = 0, level = 1),
                 Effect.SeatHeat(at = 2, level = 1),
                 Effect.Temp(at = 2, celsius = 24f),
@@ -97,6 +103,7 @@ val RainForest = Theme(
             video = "rain_forest/05_sunlight.mp4", audio = "rain_forest/birds.mp3",
             durationSec = 35, glow = 0xFF6B8F3A, rain = 0f,
             effects = listOf(
+                Effect.Ambient(at = 0, color = 0xFFD45A, name = "햇살 노랑"),
                 Effect.SeatHeat(at = 0, level = 0),
                 Effect.Window(at = 3, percent = 10),
                 Effect.Temp(at = 3, celsius = 23f),
