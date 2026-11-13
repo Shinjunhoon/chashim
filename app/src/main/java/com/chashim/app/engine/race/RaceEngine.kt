@@ -66,6 +66,11 @@ class RaceEngine(
     private val scope: CoroutineScope,
     context: Context,
 ) {
+    companion object {
+        /** 테스트용: 게임이 스스로 조종한다 (--ez race_auto true) */
+        var autopilot = false
+    }
+
     private val prefs = context.getSharedPreferences("race", Context.MODE_PRIVATE)
 
     private val _phase = MutableStateFlow<RacePhase>(RacePhase.Idle)

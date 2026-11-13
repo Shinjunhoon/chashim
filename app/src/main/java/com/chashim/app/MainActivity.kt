@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("steer_reset", false)) race.steerOverride = null
         if (intent.hasExtra("brake")) race.brakeOverride = intent.getBooleanExtra("brake", false)
         if (intent.getBooleanExtra("brake_reset", false)) race.brakeOverride = null
+        if (intent.hasExtra("race_auto")) com.chashim.app.engine.race.RaceEngine.autopilot = intent.getBooleanExtra("race_auto", false)
         when (intent.getStringExtra("cmd")) {
             "fly", "race" -> lifecycleScope.launch { ready.first { it }; startRace() }
             // 차 정보를 다 받은 뒤에 시작한다. 그래야 시작 전 설정을 저장하고 나중에 복구할 수 있다.
