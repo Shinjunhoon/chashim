@@ -23,33 +23,39 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.nativeCanvas
 import com.chashim.app.engine.flight.FlightHud
+import com.chashim.app.engine.flight.LEAD_SEC
 import com.chashim.app.engine.flight.Mark
-import com.chashim.app.engine.flight.RING_LEAD_SEC
 import com.chashim.app.engine.flight.STAR_FALL_SEC
+import com.chashim.app.engine.flight.Segment
+import com.chashim.app.engine.flight.WIND_HALF_V
+import com.chashim.app.engine.flight.WIND_HALF_X
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
 /** 조준점이 움직이는 범위: 화면 가로의 ±40% */
 const val AIM_RANGE = 0.4f
+/** 높이 0(위) ~ 1(아래)가 화면 세로 어디에 오는지 */
+private const val TOP_Y = 0.36f
+private const val SPAN_Y = 0.34f
 
 private val Gold = Color(0xFFFFC94A)
-private val GoldDeep = Color(0xFFE08A1E)
-private val Mint = Color(0xFF7CF2C2)
+private val Wind = Color(0xFFA8F0FF)
 private val Coral = Color(0xFFFF6B6B)
 
 /** 화면 쪽 시간 기준점. 엔진은 20Hz로 알려 주고, 화면은 그 사이를 이어서 매 프레임 그린다 */
 private class Clock {
-    var segId: String? = null
     var segT = 0f
     var at = 0L
     var aim = 0f
-    var lastFrame = 0L
+    var aimV = 0f
+    var glow = 0f
 }
 
 /**
- * 비행 화면 위에 그리는 것: 속도감 줄기, 먹구름, 링, 별빛, 조준점.
- * 멀리 지평선에서 다가오는 원근감으로 그린다.
+ * 비행 화면 위에 그리는 것: 바람길, 속도감 줄기, 먹구름, 별빛, 조준점, 바람 세기.
+ * 바람길·먹구름은 멀리 지평선에서 원근감 있게 다가온다.
  */
 @Composable
 fun FlightCanvas(hud: FlightHud, modifier: Modifier = Modifier) {
@@ -57,7 +63,6 @@ fun FlightCanvas(hud: FlightHud, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { while (true) withFrameNanos { frame = it } }
     val clock = remember { Clock() }
     LaunchedEffect(hud.segT, hud.segment?.id) {
-        clock.segId = hud.segment?.id
         clock.segT = hud.segT
         clock.at = System.nanoTime()
     }
@@ -71,78 +76,128 @@ fun FlightCanvas(hud: FlightHud, modifier: Modifier = Modifier) {
     Canvas(modifier) {
         frame // 매 프레임 다시 그린다
         val seg = hud.segment ?: return@Canvas
-        val speed = if (hud.hover) 0.5f else 1f
-        // 엔진 값 사이를 이어 붙인 지금 시각 (최대 0.15초만 앞서 간다)
-        val lt = clock.segT + ((System.nanoTime() - clock.at) / 1e9f).coerceIn(0f, 0.15f) * speed
-        // 조준점도 프레임마다 부드럽게 따라간다
+        val lt = clock.segT + ((System.nanoTime() - clock.at) / 1e9f).coerceIn(0f, 0.15f)
         clock.aim += (hud.aim - clock.aim) * 0.3f
+        clock.aimV += (hud.aimV - clock.aimV) * 0.3f
+        clock.glow += ((if (hud.inWind) 1f else 0f) - clock.glow) * 0.12f
 
         val w = size.width
         val h = size.height
-        val vp = Offset(w / 2, h * 0.38f)        // 지평선 소실점
-        val catchY = h * 0.52f                    // 조준점 높이
+        val vp = Offset(w / 2, h * 0.30f)        // 지평선 소실점
         fun sx(x: Float) = w / 2 + x * w * AIM_RANGE
+        fun sy(v: Float) = h * (TOP_Y + SPAN_Y * v)
+        fun project(x: Float, v: Float, s: Float) = Offset(vp.x + (sx(x) - vp.x) * s, vp.y + (sy(v) - vp.y) * s)
 
-        speedLines(lt, vp, if (hud.hover) 0.4f else 1f)
+        speedLines(lt, vp, 0.5f + hud.windLevel * 0.25f)
+
+        // 바람길
+        val hidden = seg.isHidden(lt)
+        windRibbon(seg, lt, ::project, w, h, if (hidden) 0f else 1f, clock.glow)
 
         // 먹구름
         seg.clouds.forEachIndexed { i, c ->
-            val d = (c.t - lt) / RING_LEAD_SEC
+            val d = (c.t - lt) / LEAD_SEC
             if (d > 1.2f || d < -0.4f) return@forEachIndexed
             val s = perspective(d)
             val fadeIn = ((1.2f - d) / 0.2f).coerceIn(0f, 1f)
             val fadeOut = if (d < 0) (1f + d / 0.4f).coerceIn(0f, 1f) else 1f
-            val center = Offset(vp.x + (sx(c.x) - vp.x) * s, vp.y + (catchY - vp.y) * s)
             val halfW = c.w / 2 * w * AIM_RANGE * s
             val hit = hud.cloudHit.getOrNull(i)
-            // 충돌 경로 경고: 조준점이 구름 범위 안이면 붉은 기운
-            val danger = hit == null && d in 0f..0.7f && kotlin.math.abs(clock.aim - c.x) <= c.w / 2
-            stormCloud(center, halfW, fadeIn * fadeOut, lt, i, danger, hit == true)
-        }
-
-        // 링
-        seg.rings.forEachIndexed { i, r ->
-            val d = (r.t - lt) / RING_LEAD_SEC
-            if (d > 1.25f || d < -0.35f) return@forEachIndexed
-            val s = perspective(d)
-            val fadeIn = ((1.25f - d) / 0.25f).coerceIn(0f, 1f)
-            val fadeOut = if (d < 0) (1f + d / 0.35f).coerceIn(0f, 1f) else 1f
-            val center = Offset(vp.x + (sx(r.x) - vp.x) * s, vp.y + (catchY - vp.y) * s)
-            val radius = h * 0.15f * s
-            val mark = hud.ringMarks.getOrNull(i) ?: Mark.PENDING
-            gateRing(center, radius, fadeIn * fadeOut, mark, lt)
-            if (mark == Mark.HIT) {
-                val age = lt - (hud.ringAt.getOrNull(i) ?: r.t)
-                sparks(Offset(sx(r.x), catchY), age, Mint, 18, h * 0.32f)
-            }
+            val danger = hit == null && d in 0f..0.7f && abs(clock.aim - c.x) <= c.w / 2 &&
+                abs(clock.aimV - c.v) <= com.chashim.app.engine.flight.CLOUD_HALF_V
+            stormCloud(project(c.x, c.v, s), halfW, fadeIn * fadeOut, lt, i, danger, hit == true)
         }
 
         // 별빛
         seg.stars.forEachIndexed { i, st ->
             val p = (lt - (st.t - STAR_FALL_SEC)) / STAR_FALL_SEC
             val mark = hud.starMarks.getOrNull(i) ?: Mark.PENDING
-            val x = sx(st.x) + sin(lt * 2.2f + i) * 5f
+            val target = Offset(sx(st.x), sy(st.v))
             if (mark == Mark.HIT) {
                 val age = lt - (hud.starAt.getOrNull(i) ?: st.t)
                 if (age < 0.9f) {
                     val color = if (st.big) Color.White else Gold
-                    sparks(Offset(sx(st.x), catchY), age, color, if (st.big) 22 else 12, h * (if (st.big) 0.28f else 0.16f))
-                    floatText(if (st.big) "+150" else "+50", Offset(sx(st.x), catchY - h * 0.06f - age * h * 0.1f), (1f - age / 0.9f), text, st.big)
+                    sparks(target, age, color, if (st.big) 22 else 12, h * (if (st.big) 0.28f else 0.16f))
+                    floatText(if (st.big) "+150" else "+50", target - Offset(0f, h * 0.06f + age * h * 0.1f), 1f - age / 0.9f, text, st.big)
                 }
                 return@forEachIndexed
             }
             if (p < 0f || p > 1.5f) return@forEachIndexed
-            val y = -h * 0.06f + (catchY + h * 0.06f) * p
+            val x = target.x + sin(lt * 2.2f + i) * 5f
+            val y = -h * 0.06f + (target.y + h * 0.06f) * p
             val alpha = if (p > 1f) (1f - (p - 1f) / 0.5f).coerceIn(0f, 1f) * 0.6f else (p / 0.12f).coerceIn(0f, 1f)
             fallingStar(Offset(x, y), st.big, alpha, lt + i)
         }
 
-        reticle(Offset(sx(clock.aim), catchY))
+        val aimPos = Offset(sx(clock.aim), sy(clock.aimV))
+        reticle(aimPos, clock.glow)
+        windMeter(aimPos + Offset(0f, 62f), hud.windLevel)
+        altitudeBar(Offset(w - 46f, sy(0f)), sy(1f) - sy(0f), clock.aimV, hud.diving)
     }
 }
 
 /** d: 도달까지 남은 비율 (1 = 가장 멀리, 0 = 도달, 음수 = 지나감) → 화면 크기 비율 */
 private fun perspective(d: Float): Float = if (d >= 0) 1f / (1f + 5f * d) else 1f + (-d) * 3.5f
+
+/**
+ * 지평선에서 다가오는 빛의 띠. 지금 위치(가장 가깝고 넓음)부터 LEAD_SEC 뒤(멀고 좁음)까지 이어 그린다.
+ * 띠 위로 바람 입자가 흘러온다. 조준점이 띠 안에 있으면 더 밝게 빛난다.
+ */
+private fun DrawScope.windRibbon(
+    seg: Segment, lt: Float, project: (Float, Float, Float) -> Offset, w: Float, h: Float, visible: Float, glow: Float,
+) {
+    if (visible <= 0f) return
+    val n = 30
+    val left = ArrayList<Offset>(n + 1)
+    val right = ArrayList<Offset>(n + 1)
+    val center = ArrayList<Offset>(n + 1)
+    for (k in 0..n) {
+        val d = k / n.toFloat()                // 0 = 지금, 1 = 멀리
+        val tau = lt + d * LEAD_SEC
+        val (x, v) = seg.windAt(tau)
+        val s = perspective(d)
+        val c = project(x, v, s)
+        val half = WIND_HALF_X * w * AIM_RANGE * s
+        center += c
+        left += c - Offset(half, 0f)
+        right += c + Offset(half, 0f)
+    }
+    // 띠 면: 가까울수록 진하게 (조각마다 투명도를 달리 그린다)
+    for (k in 0 until n) {
+        val d = k / n.toFloat()
+        val a = (0.05f + 0.13f * (1f - d) + 0.12f * glow * (1f - d)) * visible
+        val path = Path().apply {
+            moveTo(left[k].x, left[k].y); lineTo(left[k + 1].x, left[k + 1].y)
+            lineTo(right[k + 1].x, right[k + 1].y); lineTo(right[k].x, right[k].y); close()
+        }
+        drawPath(path, Wind.copy(alpha = a))
+    }
+    // 가장자리와 가운데 선
+    for (edge in listOf(left, right)) {
+        for (k in 0 until n) {
+            val d = k / n.toFloat()
+            drawLine(Wind.copy(alpha = (0.15f + 0.45f * (1f - d)) * visible), edge[k], edge[k + 1], strokeWidth = 1f + 2.5f * (1f - d))
+        }
+    }
+    for (k in 0 until n) {
+        val d = k / n.toFloat()
+        drawLine(Color.White.copy(alpha = (0.1f + 0.35f * glow) * (1f - d) * visible), center[k], center[k + 1], strokeWidth = 1f + 3f * (1f - d))
+    }
+    // 흘러오는 바람 입자: 멀리서 가까이로
+    for (i in 0 until 26) {
+        val seed = (i * 0.618034f) % 1f
+        val side = ((i * 0.382f) % 1f) * 2f - 1f
+        val d = 1f - ((lt * 0.55f + seed) % 1f)  // 1 → 0 으로 다가온다
+        val tau = lt + d * LEAD_SEC
+        val (x, v) = seg.windAt(tau)
+        val s = perspective(d)
+        val p = project(x, v, s) + Offset(side * WIND_HALF_X * w * AIM_RANGE * s * 0.85f, 0f)
+        val (x2, v2) = seg.windAt(tau + 0.15f)
+        val s2 = perspective(d + 0.05f)
+        val q = project(x2, v2, s2) + Offset(side * WIND_HALF_X * w * AIM_RANGE * s2 * 0.85f, 0f)
+        drawLine(Color.White.copy(alpha = (0.5f * (1f - d) + 0.1f) * visible), q, p, strokeWidth = 1.5f + 3f * (1f - d), cap = StrokeCap.Round)
+    }
+}
 
 /** 지평선에서 퍼져 나가는 옅은 바람 줄기 */
 private fun DrawScope.speedLines(t: Float, vp: Offset, strength: Float) {
@@ -150,52 +205,12 @@ private fun DrawScope.speedLines(t: Float, vp: Offset, strength: Float) {
     for (i in 0 until 34) {
         val seed = (i * 0.618034f) % 1f
         val angle = (i * 2.399963f) % (2 * PI.toFloat())
-        val prog = ((t * 0.45f + seed) % 1f)
+        val prog = ((t * 0.45f * (0.8f + strength * 0.4f) + seed) % 1f)
         val d0 = prog * prog * maxD + size.height * 0.08f
         val len = 20f + prog * 160f
         val dir = Offset(cos(angle), sin(angle) * 0.75f)
-        val a = (prog * 0.16f * strength).coerceAtMost(0.16f)
-        drawLine(
-            Color.White.copy(alpha = a),
-            vp + dir * d0, vp + dir * (d0 + len),
-            strokeWidth = 1.5f + prog * 2f, cap = StrokeCap.Round,
-        )
-    }
-}
-
-/** 빛나는 금빛 관문 */
-private fun DrawScope.gateRing(c: Offset, r: Float, alpha: Float, mark: Mark, t: Float) {
-    if (alpha <= 0f || r < 2f) return
-    val base = when (mark) { Mark.PENDING -> Gold; Mark.HIT -> Mint; Mark.MISS -> Coral }
-    val deep = when (mark) { Mark.PENDING -> GoldDeep; Mark.HIT -> Color(0xFF2FB98A); Mark.MISS -> Color(0xFFB83A3A) }
-    val band = (r * 0.12f).coerceAtLeast(2f)
-    // 은은한 빛무리
-    drawCircle(
-        Brush.radialGradient(
-            0.55f to Color.Transparent,
-            0.78f to base.copy(alpha = 0.32f * alpha),
-            1f to Color.Transparent,
-            center = c, radius = r * 1.45f,
-        ),
-        radius = r * 1.45f, center = c,
-    )
-    // 본체 띠 (빛이 돌아가는 금속 느낌)
-    rotate(t * 40f, c) {
-        drawCircle(
-            Brush.sweepGradient(
-                listOf(deep, base, Color.White, base, deep, base, Color.White, base, deep).map { it.copy(alpha = alpha) },
-                center = c,
-            ),
-            radius = r, center = c, style = Stroke(band),
-        )
-    }
-    // 안쪽 가는 선
-    drawCircle(Color.White.copy(alpha = 0.55f * alpha), radius = r - band * 0.9f, center = c, style = Stroke(1.5f))
-    // 둘레의 작은 불빛 8개
-    for (k in 0 until 8) {
-        val a = t * 0.9f + k * (PI.toFloat() / 4)
-        val p = c + Offset(cos(a), sin(a)) * (r + band * 1.1f)
-        drawCircle(Color.White.copy(alpha = 0.85f * alpha), radius = (band * 0.28f).coerceAtLeast(1.5f), center = p)
+        val a = (prog * 0.14f * strength).coerceAtMost(0.22f)
+        drawLine(Color.White.copy(alpha = a), vp + dir * d0, vp + dir * (d0 + len), strokeWidth = 1.5f + prog * 2f, cap = StrokeCap.Round)
     }
 }
 
@@ -206,14 +221,10 @@ private fun DrawScope.stormCloud(c: Offset, halfW: Float, alpha: Float, t: Float
     if (danger || hit) {
         val pulse = 0.55f + 0.45f * sin(t * 10f)
         drawCircle(
-            Brush.radialGradient(
-                listOf(Coral.copy(alpha = 0.35f * alpha * pulse), Color.Transparent),
-                center = c, radius = halfW * 1.6f,
-            ),
+            Brush.radialGradient(listOf(Coral.copy(alpha = 0.35f * alpha * pulse), Color.Transparent), center = c, radius = halfW * 1.6f),
             radius = halfW * 1.6f, center = c,
         )
     }
-    // 넓게 깔리는 어두운 안개 (가로로 넓은 타원, 가장자리는 부드럽게 사라진다)
     scale(1f, 0.5f, pivot = c) {
         drawCircle(
             Brush.radialGradient(
@@ -225,11 +236,10 @@ private fun DrawScope.stormCloud(c: Offset, halfW: Float, alpha: Float, t: Float
             radius = halfW * 1.5f, center = c,
         )
     }
-    // 뭉게뭉게한 덩어리: 가장자리가 부드럽게 사라지는 퍼프를 많이 겹친다. 아래는 평평하고 위로 부풀게
     for (j in 0 until 18) {
         val u = rnd(j) - 0.5f
         val o = Offset(u * 2.0f * halfW, -(1f - 4f * u * u) * halfW * 0.35f * rnd(j + 30) + halfW * 0.04f)
-        val rad = halfW * (0.32f + rnd(j + 60) * 0.3f) * (1.1f - kotlin.math.abs(u))
+        val rad = halfW * (0.32f + rnd(j + 60) * 0.3f) * (1.1f - abs(u))
         drawCircle(
             Brush.radialGradient(
                 0f to Color(0xFF353C4A).copy(alpha = 0.8f * alpha),
@@ -241,7 +251,6 @@ private fun DrawScope.stormCloud(c: Offset, halfW: Float, alpha: Float, t: Float
             radius = rad, center = c + o,
         )
     }
-    // 위쪽은 햇빛을 받아 은빛으로
     for (j in 0 until 8) {
         val u = rnd(j + 90) - 0.5f
         val o = Offset(u * 1.5f * halfW, -halfW * (0.18f + (1f - 4f * u * u) * 0.25f))
@@ -256,7 +265,6 @@ private fun DrawScope.stormCloud(c: Offset, halfW: Float, alpha: Float, t: Float
             radius = rad, center = c + o,
         )
     }
-    // 번개
     val flick = sin(t * 7.3f + idx * 2.1f)
     if (flick > 0.9f || hit) {
         val path = Path()
@@ -285,7 +293,6 @@ private fun DrawScope.fallingStar(p: Offset, big: Boolean, alpha: Float, t: Floa
         Brush.radialGradient(listOf(color.copy(alpha = 0.55f * alpha), Color.Transparent), center = p, radius = core * 3.2f),
         radius = core * 3.2f, center = p,
     )
-    // 네 갈래 반짝임
     rotate(t * 70f, p) {
         val path = Path()
         for (k in 0 until 8) {
@@ -300,7 +307,7 @@ private fun DrawScope.fallingStar(p: Offset, big: Boolean, alpha: Float, t: Floa
     drawCircle(Color.White.copy(alpha = alpha), radius = core * 0.35f, center = p)
 }
 
-/** 받거나 통과했을 때 흩어지는 빛 입자 */
+/** 받았을 때 흩어지는 빛 입자 */
 private fun DrawScope.sparks(c: Offset, age: Float, color: Color, count: Int, reach: Float) {
     val life = 0.7f
     if (age < 0f || age > life) return
@@ -321,18 +328,48 @@ private fun DrawScope.floatText(s: String, p: Offset, alpha: Float, paint: Paint
     drawContext.canvas.nativeCanvas.drawText(s, p.x, p.y, paint)
 }
 
-/** 조준점: 네 개의 짧은 호 + 가운데 점 */
-private fun DrawScope.reticle(c: Offset) {
+/** 조준점: 네 개의 짧은 호 + 가운데 점. 바람길 안에 있으면 하늘빛으로 빛난다 */
+private fun DrawScope.reticle(c: Offset, glow: Float) {
+    val tint = lerp(Color.White, Wind, glow)
     drawCircle(
-        Brush.radialGradient(listOf(Color.White.copy(alpha = 0.16f), Color.Transparent), center = c, radius = 70f),
-        radius = 70f, center = c,
+        Brush.radialGradient(listOf(tint.copy(alpha = 0.16f + 0.2f * glow), Color.Transparent), center = c, radius = 70f + 30f * glow),
+        radius = 70f + 30f * glow, center = c,
     )
     val r = 32f
     for (k in 0 until 4) {
         drawArc(
-            Color.White.copy(alpha = 0.95f), startAngle = -35f + k * 90f, sweepAngle = 70f, useCenter = false,
+            tint.copy(alpha = 0.95f), startAngle = -35f + k * 90f, sweepAngle = 70f, useCenter = false,
             topLeft = c - Offset(r, r), size = Size(r * 2, r * 2), style = Stroke(3.5f, cap = StrokeCap.Round),
         )
     }
-    drawCircle(Color.White, radius = 4.5f, center = c)
+    drawCircle(tint, radius = 4.5f, center = c)
 }
+
+/** 조준점 아래 바람 세기 막대 3개 (실제 차 바람 +0~3단과 같다) */
+private fun DrawScope.windMeter(c: Offset, level: Int) {
+    for (i in 0 until 3) {
+        val on = level > i
+        val x = c.x + (i - 1) * 18f
+        val bh = 10f + i * 7f
+        drawRoundRect(
+            if (on) Wind else Color.White.copy(alpha = 0.25f),
+            topLeft = Offset(x - 5f, c.y + 24f - bh), size = Size(10f, bh),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f),
+        )
+    }
+}
+
+/** 오른쪽 가장자리 높이 표시: 브레이크를 밟으면 아래로 */
+private fun DrawScope.altitudeBar(top: Offset, height: Float, v: Float, diving: Boolean) {
+    drawLine(Color.White.copy(alpha = 0.25f), top, top + Offset(0f, height), strokeWidth = 4f, cap = StrokeCap.Round)
+    val p = top + Offset(0f, height * v)
+    drawCircle(if (diving) Gold else Color.White, radius = 10f, center = p)
+    // 아래 화살표
+    val a = top + Offset(0f, height + 26f)
+    val path = Path().apply { moveTo(a.x - 9f, a.y - 6f); lineTo(a.x + 9f, a.y - 6f); lineTo(a.x, a.y + 6f); close() }
+    drawPath(path, (if (diving) Gold else Color.White).copy(alpha = if (diving) 1f else 0.4f))
+}
+
+private fun lerp(a: Color, b: Color, t: Float) = Color(
+    a.red + (b.red - a.red) * t, a.green + (b.green - a.green) * t, a.blue + (b.blue - a.blue) * t, a.alpha + (b.alpha - a.alpha) * t,
+)

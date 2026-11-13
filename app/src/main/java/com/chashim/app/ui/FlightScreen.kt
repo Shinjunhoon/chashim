@@ -97,7 +97,7 @@ fun FlightScreen(
             val aim = hud.aim
             FlightVideo(
                 path = hud.segment?.video,
-                speed = if (hud.hover) 0.5f else 1f,
+                speed = 1f + hud.windLevel * 0.08f, // 순풍을 타면 조금 빨라진다
                 modifier = Modifier.graphicsLayer {
                     scaleX = OVERSCAN; scaleY = OVERSCAN
                     // 오른쪽으로 꺾으면 시야가 오른쪽으로 → 영상은 왼쪽으로 이동
@@ -120,16 +120,21 @@ fun FlightScreen(
                     Text("점수", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
                     Text("${hud.score}", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "링 ${hud.ringsHit}/${hud.ringsTotal} · 별빛 ${hud.starsCaught}/${hud.starsTotal}" + if (hud.combo >= 2) " · 콤보 ${hud.combo}" else "",
+                        "바람길 ${hud.windPct}% · 별빛 ${hud.starsCaught}/${hud.starsTotal}" + if (hud.multiplier >= 2) " · 순풍 ×${hud.multiplier}" else "",
                         color = Palette.accent, fontSize = 18.sp,
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                if (hud.hover) Pill("🛑 브레이크 호버링 · 0.5배속", Palette.warn)
+                if (hud.diving) Pill("▼ 브레이크 · 내려가는 중", Palette.warn)
             }
 
             // 알림
             hud.toast?.let { t -> ToastView(t.id, t.text, t.good, Modifier.align(Alignment.TopCenter).padding(top = 40.dp)) }
+
+            // 바람길이 숨은 구간: 바람 세기만이 단서
+            if (hud.hidden && phase is FlightPhase.Flying) {
+                Pill("🌬️ 바람길이 사라졌어요 · 바람이 세지는 쪽으로", Color(0xFFA8F0FF), Modifier.align(Alignment.TopCenter).padding(top = 100.dp))
+            }
 
             // 갈림길
             hud.fork?.let { f -> ForkBanner(f, Modifier.align(Alignment.Center).padding(top = 280.dp)) }
@@ -144,7 +149,7 @@ fun FlightScreen(
 
             // 준비 / 카운트다운 / 복구
             when (phase) {
-                is FlightPhase.Calibrate -> CenterCard("핸들을 좌우로 돌려 보세요", "조준점이 따라 움직여요 · ${phase.secLeft}")
+                is FlightPhase.Calibrate -> CenterCard("핸들을 돌리고, 브레이크를 밟아 보세요", "핸들은 좌우, 브레이크는 아래로 · ${phase.secLeft}")
                 is FlightPhase.Countdown -> Text(
                     "${phase.n}", color = Color.White, fontSize = 160.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Center),
@@ -168,7 +173,8 @@ fun FlightScreen(
                     modifier = Modifier.fillMaxWidth(), color = Palette.accent,
                 )
             }
-            SteerCard(hud.steerDeg, hud.hover)
+            SteerCard(hud.steerDeg, hud.diving)
+            WindCard(hud.windLevel, hud.inWind, hud.hidden)
             Spacer(Modifier.height(2.dp))
             EffectRow("🌬️", if (effects.gust) "바람 · 돌풍!" else "바람", effects.fan?.let { "${it}단" }, effects.gust)
             EffectRow("🪟", "창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it% 열림" }, effects.lastChanged == "window")
@@ -191,9 +197,41 @@ fun FlightScreen(
     }
 }
 
+/** 4D 패널: 바람길과의 거리 = 실제 차 바람 세기 */
+@Composable
+private fun WindCard(level: Int, inWind: Boolean, hidden: Boolean) {
+    val bg by animateColorAsState(if (inWind) Color(0xFFA8F0FF).copy(alpha = 0.18f) else Palette.surface, tween(400), label = "wind")
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(bg)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🌬️ 바람길", color = Palette.text, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Text(
+                when (level) { 3 -> "올라탔어요"; 2 -> "가까워요"; 1 -> "조금 가까워요"; else -> "멀어요" },
+                color = if (inWind) Color(0xFFA8F0FF) else Palette.muted, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) { i ->
+                Box(
+                    Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(5.dp))
+                        .background(if (level > i) Color(0xFFA8F0FF) else Color.White.copy(alpha = 0.12f)),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (hidden) "바람길이 숨었어요. 차 바람이 세지는 쪽을 찾아요" else "가까울수록 차 바람이 세져요 (기본 + ${level}단)",
+            color = Palette.muted, fontSize = 14.sp,
+        )
+    }
+}
+
 /** 4D 패널: 핸들 각도 막대 */
 @Composable
-private fun SteerCard(deg: Float, hover: Boolean) {
+private fun SteerCard(deg: Float, diving: Boolean) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.surface)
             .padding(horizontal = 18.dp, vertical = 12.dp),
@@ -212,7 +250,7 @@ private fun SteerCard(deg: Float, hover: Boolean) {
             drawLine(Color.White, Offset(cx, 0f), Offset(cx, size.height), 2f)
         }
         Spacer(Modifier.height(6.dp))
-        Text(if (hover) "브레이크: 호버링 중" else "브레이크를 밟으면 천천히 날아요", color = Palette.muted, fontSize = 14.sp)
+        Text(if (diving) "브레이크: 내려가는 중" else "브레이크를 밟으면 내려가고, 떼면 올라와요", color = Palette.muted, fontSize = 14.sp)
     }
 }
 
@@ -254,10 +292,10 @@ private fun ToastView(id: Int, text: String, good: Boolean, modifier: Modifier) 
 }
 
 @Composable
-private fun Pill(text: String, color: Color) {
+private fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
         text, color = color, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = 0.55f))
+        modifier = modifier.clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = 0.55f))
             .padding(horizontal = 18.dp, vertical = 10.dp),
     )
 }
@@ -329,7 +367,7 @@ fun FlightResultScreen(result: FlightPhase.Result, onHome: () -> Unit, onAgain: 
         Spacer(Modifier.height(28.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Stat("점수", "${result.score}", if (result.newBest) "최고 기록!" else "최고 ${result.best}")
-            Stat("링 통과", "${result.ringsHit}/${result.ringsTotal}", null)
+            Stat("바람길", "${result.windPct}%", "바람을 탄 시간")
             Stat("별빛", "${result.starsCaught}/${result.starsTotal}", null)
         }
         Spacer(Modifier.height(20.dp))
