@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
                         effects = race.effects.collectAsState().value,
                         steer = race::steer,
                         braking = race::braking,
+                        turn = race::turn,
+                        belt = race::belt,
+                        passenger = race::passenger,
                         onEvent = race::onEvent,
                         onStop = { race.stop() },
                     )
@@ -109,6 +112,9 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("steer_reset", false)) race.steerOverride = null
         if (intent.hasExtra("brake")) race.brakeOverride = intent.getBooleanExtra("brake", false)
         if (intent.getBooleanExtra("brake_reset", false)) race.brakeOverride = null
+        // 테스트용: 방향지시등 (--ei turn -1|0|1), 안전벨트 (--ez belt true|false)
+        if (intent.hasExtra("turn")) race.turnOverride = intent.getIntExtra("turn", 0)
+        if (intent.hasExtra("belt")) race.beltOverride = intent.getBooleanExtra("belt", true)
         if (intent.hasExtra("race_auto")) com.chashim.app.engine.race.RaceEngine.autopilot = intent.getBooleanExtra("race_auto", false)
         when (intent.getStringExtra("cmd")) {
             "fly", "race" -> lifecycleScope.launch { ready.first { it }; startRace() }

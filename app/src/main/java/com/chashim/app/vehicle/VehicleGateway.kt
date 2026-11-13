@@ -14,6 +14,12 @@ import ai.pleos.playground.vehicle.listener.EvChargePortOpenListener
 import ai.pleos.playground.vehicle.listener.GearSelectionListener
 import ai.pleos.playground.vehicle.listener.BrakePedalStatusListener
 import ai.pleos.playground.vehicle.listener.SteeringWheelAngleListener
+import ai.pleos.playground.vehicle.listener.TurnSignalStateListener
+import ai.pleos.playground.vehicle.listener.SeatBeltBuckledStateListener
+import ai.pleos.playground.vehicle.listener.SeatOccupancyListener
+import ai.pleos.playground.vehicle.constant.area.TurnSignalValue
+import ai.pleos.playground.vehicle.constant.control.FanDirectionType
+import ai.pleos.playground.vehicle.constant.control.LightSwitch
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +52,32 @@ data class Capabilities(
     val cabinArea: SeatArea? = null,
 )
 
+/** 레이스 몰입용 추가 장치 (차종마다 다르다) */
+data class ExtraCaps(
+    val cabinLight: Boolean = false,
+    val readingArea: SeatArea? = null,
+    val brightArea: SeatArea? = null,
+    val brightMin: Int = 0,
+    val brightMax: Int = 100,
+    val wheelHeatMax: Int? = null,
+    val ventArea: SeatArea? = null,
+    val ventMax: Int = 3,
+    val dirArea: SeatArea? = null,
+    val dirs: List<FanDirectionType> = emptyList(),
+    val recircArea: SeatArea? = null,
+)
+
+/** 추가 장치의 시작 전 상태 */
+data class ExtraSnapshot(
+    val cabin: LightSwitch?,
+    val reading: LightSwitch?,
+    val brightness: Int?,
+    val wheelHeat: Int?,
+    val vent: Int?,
+    val direction: FanDirectionType?,
+    val recirc: Boolean?,
+)
+
 /** 세션 시작 전 차 상태. 끝나면 이 값으로 되돌린다. */
 data class Snapshot(
     val power: Boolean?,
@@ -73,6 +105,34 @@ class VehicleGateway(context: Context) {
     private val light = vehicle.getLight()
     private val steering by lazy { vehicle.getSteeringWheel() }
     private val brakeApi by lazy { vehicle.getBrake() }
+    private val turnApi by lazy { vehicle.getTurnSignal() }
+
+    /** 방향지시등 (레이스 대시 입력) */
+    private val _turn = MutableStateFlow<TurnSignalValue?>(null)
+    val turnSignal: StateFlow<TurnSignalValue?> = _turn.asStateFlow()
+
+    /** 운전석 안전벨트. 차가 알려 주지 않으면 null */
+    private val _belt = MutableStateFlow<Boolean?>(null)
+    val driverBelt: StateFlow<Boolean?> = _belt.asStateFlow()
+
+    /** 조수석에 사람이 있는지 */
+    private val _passenger = MutableStateFlow<Boolean?>(null)
+    val passenger: StateFlow<Boolean?> = _passenger.asStateFlow()
+
+    private val driverSeat = SeatArea(SeatValue.ROW_1_LEFT)
+    private val passengerSeat = SeatArea(SeatValue.ROW_1_RIGHT)
+    private val turnListener = object : TurnSignalStateListener {
+        override fun onTurnSignalStateUpdated(v: TurnSignalValue?) { _turn.value = v }
+        override fun onFailed(e: Exception) = warn("방향지시등 감지", e)
+    }
+    private val beltListener = object : SeatBeltBuckledStateListener {
+        override fun onSeatBeltBuckledStateUpdated(v: Boolean?) { _belt.value = v }
+        override fun onFailed(e: Exception) = warn("안전벨트 감지", e)
+    }
+    private val occupancyListener = object : SeatOccupancyListener {
+        override fun onSeatOccupancyUpdated(v: Boolean?) { _passenger.value = v }
+        override fun onFailed(e: Exception) = warn("조수석 감지", e)
+    }
 
     /** 핸들 각도 (도). 엔터테인 모드 조종에 쓴다 */
     private val _steering = MutableStateFlow(0f)
@@ -146,6 +206,13 @@ class VehicleGateway(context: Context) {
         runCatching { ev.registerEvBatteryLevel(levelListener) }
         runCatching { steering.registerSteeringWheelAngle(steeringListener) }.onFailure { Log.w(TAG, "핸들 등록 실패 $it") }
         runCatching { brakeApi.registerBrakePedalStatus(brakeListener) }.onFailure { Log.w(TAG, "브레이크 등록 실패 $it") }
+        _belt.value = call { ok, fail -> seat.getCurrentSeatBeltBuckledState(driverSeat, ok, fail) }
+        _passenger.value = call { ok, fail -> seat.getCurrentSeatOccupancy(passengerSeat, ok, fail) }
+        _turn.value = call { ok, fail -> turnApi.getCurrentTurnSignalState(ok, fail) }
+        runCatching { turnApi.registerTurnSignalState(turnListener) }.onFailure { Log.w(TAG, "방향지시등 등록 실패 $it") }
+        runCatching { seat.registerSeatBeltBuckledState(driverSeat, beltListener) }.onFailure { Log.w(TAG, "안전벨트 등록 실패 $it") }
+        runCatching { seat.registerSeatOccupancy(passengerSeat, occupancyListener) }.onFailure { Log.w(TAG, "조수석 등록 실패 $it") }
+        Log.i(TAG, "belt ${_belt.value} passenger ${_passenger.value} turn ${_turn.value}")
     }
 
     /** 앱이 켜질 때 공조 등이 아직 준비 안 돼 못 받은 정보가 있으면 다시 받는다 */
@@ -166,6 +233,9 @@ class VehicleGateway(context: Context) {
         runCatching { ev.unregisterEvBatteryLevel(levelListener) }
         runCatching { steering.unregisterSteeringWheelAngle(steeringListener) }
         runCatching { brakeApi.unregisterBrakePedalStatus(brakeListener) }
+        runCatching { turnApi.unregisterTurnSignalState(turnListener) }
+        runCatching { seat.unregisterSeatBeltBuckledState(driverSeat, beltListener) }
+        runCatching { seat.unregisterSeatOccupancy(passengerSeat, occupancyListener) }
         vehicle.release()
     }
 
@@ -285,6 +355,87 @@ class VehicleGateway(context: Context) {
     /** 무드등 색 (0xRRGGBB) */
     suspend fun setAmbientColor(rgb: Int): Int? = caps.ambientArea?.let { a ->
         call { ok, fail -> light.setAmbientLightBrightnessColor(a, rgb and 0xFFFFFF, { _, r -> ok(r) }, fail) }
+    }
+
+    // ---- 레이스 몰입용 추가 장치 ----
+
+    var extra = ExtraCaps()
+        private set
+
+    suspend fun loadExtras(): ExtraCaps {
+        var c = ExtraCaps()
+        call<List<LightSwitch>> { ok, fail -> light.checkCabinLightSwitchCapabilities(ok, fail) }
+            ?.let { if (LightSwitch.ON in it) c = c.copy(cabinLight = true) }
+        call<Map<SeatArea, List<LightSwitch>>> { ok, fail -> light.checkReadingLightSwitchCapabilities(ok, fail) }
+            ?.keys?.let { k -> c = c.copy(readingArea = k.firstOrNull { it == driverSeat } ?: k.firstOrNull()) }
+        call<Map<SeatArea, ai.pleos.playground.vehicle.api.model.capability.AreaBounds<Int>>> { ok, fail ->
+            light.checkAmbientLightBrightnessCapabilities({ _, m -> ok(m) }, fail)
+        }?.entries?.firstOrNull()?.let { (a, b) -> c = c.copy(brightArea = a, brightMin = b.minValue ?: 0, brightMax = b.maxValue ?: 100) }
+        call<ai.pleos.playground.vehicle.api.model.capability.AreaBounds<Int>> { ok, fail ->
+            steering.checkHvacSteeringWheelHeatCapabilities(ok, fail)
+        }?.let { b -> c = c.copy(wheelHeatMax = b.maxValue ?: 3) }
+        call<Map<SeatArea, ai.pleos.playground.vehicle.api.model.capability.AreaBounds<Int>>> { ok, fail ->
+            seat.checkSeatVentilationCapabilities(ok, fail)
+        }?.let { m ->
+            val e = m.entries.firstOrNull { it.key == driverSeat } ?: m.entries.firstOrNull()
+            e?.let { (a, b) -> c = c.copy(ventArea = a, ventMax = b.maxValue ?: 3) }
+        }
+        call<Map<SeatArea, List<FanDirectionType>>> { ok, fail -> hvac.checkHvacFanDirectionCapabilities(ok, fail) }
+            ?.entries?.firstOrNull()?.let { (a, d) -> c = c.copy(dirArea = a, dirs = d) }
+        call<List<SeatArea>> { ok, fail -> hvac.checkHvacRecirculationCapabilities(ok, fail) }
+            ?.firstOrNull()?.let { c = c.copy(recircArea = it) }
+        extra = c
+        Log.i(TAG, "extra capabilities: $c")
+        return c
+    }
+
+    suspend fun extraSnapshot() = ExtraSnapshot(
+        cabin = if (extra.cabinLight) call { ok, fail -> light.getCabinLightSwitch(ok, fail) } else null,
+        reading = extra.readingArea?.let { a -> call { ok, fail -> light.getReadingLightSwitch(a, ok, fail) } },
+        brightness = extra.brightArea?.let { a -> call { ok, fail -> light.getAmbientLightBrightness(a, ok, fail) } },
+        wheelHeat = extra.wheelHeatMax?.let { call { ok, fail -> steering.getHvacSteeringWheelHeatState(ok, fail) } },
+        vent = extra.ventArea?.let { a -> call { ok, fail -> seat.getHvacSeatVentilationState(a, ok, fail) } },
+        direction = extra.dirArea?.let { a -> call { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) } },
+        recirc = extra.recircArea?.let { a -> call { ok, fail -> hvac.getHvacRecirculationState(a, ok, fail) } },
+    ).also { Log.i(TAG, "extra snapshot: $it") }
+
+    suspend fun restoreExtras(s: ExtraSnapshot) {
+        Log.i(TAG, "extra restore: $s")
+        s.cabin?.let { setCabinLight(it == LightSwitch.ON) }
+        s.reading?.let { setReadingLight(it == LightSwitch.ON) }
+        s.brightness?.let { setAmbientBrightness(it) }
+        s.wheelHeat?.let { setWheelHeat(it) }
+        s.vent?.let { setSeatVent(it) }
+        s.direction?.let { if (it != FanDirectionType.UNKNOWN) setFanDirection(it) }
+        s.recirc?.let { setRecirc(it) }
+    }
+
+    suspend fun setCabinLight(on: Boolean): LightSwitch? = if (!extra.cabinLight) null else
+        call { ok, fail -> light.setCabinLightSwitch(if (on) LightSwitch.ON else LightSwitch.OFF, ok, fail) }
+
+    suspend fun setReadingLight(on: Boolean): LightSwitch? = extra.readingArea?.let { a ->
+        call { ok, fail -> light.setReadingLightSwitch(a, if (on) LightSwitch.ON else LightSwitch.OFF, ok, fail) }
+    }
+
+    suspend fun setAmbientBrightness(v: Int): Int? = extra.brightArea?.let { a ->
+        call { ok, fail -> light.setAmbientLightBrightness(a, v.coerceIn(extra.brightMin, extra.brightMax), { _, r -> ok(r) }, fail) }
+    }
+
+    suspend fun setWheelHeat(level: Int): Int? = extra.wheelHeatMax?.let { max ->
+        call { ok, fail -> steering.setHvacSteeringWheelHeat(level.coerceIn(0, max), ok, fail) }
+    }
+
+    suspend fun setSeatVent(level: Int): Int? = extra.ventArea?.let { a ->
+        call { ok, fail -> seat.setHvacSeatVentilation(a, level.coerceIn(0, extra.ventMax), { _, r -> ok(r) }, fail) }
+    }
+
+    suspend fun setFanDirection(d: FanDirectionType): FanDirectionType? = extra.dirArea?.let { a ->
+        if (extra.dirs.isNotEmpty() && d !in extra.dirs) return null
+        call { ok, fail -> hvac.setHvacFanDirection(a, d, { _, r -> ok(r) }, fail) }
+    }
+
+    suspend fun setRecirc(on: Boolean): Boolean? = extra.recircArea?.let { a ->
+        call { ok, fail -> hvac.setHvacRecirculation(a, on, { _, r -> ok(r) }, fail) }
     }
 
     // ---- 공통 ----

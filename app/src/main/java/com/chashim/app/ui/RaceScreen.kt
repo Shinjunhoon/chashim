@@ -66,6 +66,9 @@ fun RaceScreen(
     effects: EffectState,
     steer: () -> Float,
     braking: () -> Boolean,
+    turn: () -> Int,
+    belt: () -> Int,
+    passenger: () -> Boolean,
     onEvent: (String) -> Unit,
     onStop: () -> Unit,
 ) {
@@ -85,7 +88,7 @@ fun RaceScreen(
     LaunchedEffect(web) {
         val w = web ?: return@LaunchedEffect
         while (true) {
-            w.evaluateJavascript("window.race&&race.input(${"%.3f".format(java.util.Locale.US, steer())},${braking()})", null)
+            w.evaluateJavascript("window.race&&race.input(${"%.3f".format(java.util.Locale.US, steer())},${braking()},${turn()},${belt()},${passenger()})", null)
             delay(33)
         }
     }
@@ -136,14 +139,16 @@ fun RaceScreen(
             Text("제주 하늘 레이스", color = Palette.text, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(info.zone ?: "출발 준비", color = Palette.accent, fontSize = 17.sp)
             SpeedWindCard(info.windLevel, info.boost)
-            EffectRow("🌬️", if (effects.gust) "바람 · 가속!" else "바람", effects.fan?.let { "${it}단" }, effects.gust)
-            EffectRow("🪟", "창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it% 열림" }, effects.lastChanged == "window")
-            EffectRow("🌧️", "와이퍼", if (effects.wiper) "작동 중" else "멈춤", effects.lastChanged == "wiper" && effects.wiper)
-            EffectRow("💺", "시트 열선", effects.seatHeat?.let { if (it == 0) "꺼짐" else "${it}단계" }, effects.lastChanged == "seat")
+            MiniRow("🌬️ 바람", effects.fan?.let { "${it}단" }, effects.gust, "🧭 방향", info.direction?.let { dirLabel(it) }, false)
+            MiniRow("🪟 창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it%" }, effects.lastChanged == "window", "🔄 공기", info.recirc?.let { if (it) "내기" else "외기" }, false)
+            MiniRow("🌧️ 와이퍼", if (effects.wiper) "작동" else "멈춤", effects.wiper, "💡 실내등", if (info.cabin) "번쩍!" else "꺼짐", info.cabin)
+            MiniRow("💺 열선", effects.seatHeat?.let { if (it == 0) "꺼짐" else "${it}단" }, effects.lastChanged == "seat", "❄️ 통풍", info.vent?.let { if (it == 0) "꺼짐" else "${it}단" }, (info.vent ?: 0) > 0)
+            MiniRow("🛞 핸들 열선", info.wheelHeat?.let { if (it == 0) "꺼짐" else "${it}단" }, (info.wheelHeat ?: 0) > 0, "📖 독서등", if (info.reading) "반짝!" else "꺼짐", info.reading)
             EffectRow(
-                "💡", "무드등", effects.ambientName ?: effects.ambient?.let { "켜짐" }, effects.lastChanged == "ambient",
+                "💡", "무드등" + (info.brightness?.let { " · 밝기 $it" } ?: ""), effects.ambientName ?: effects.ambient?.let { "켜짐" }, effects.lastChanged == "ambient",
                 swatch = effects.ambient?.let { Color(0xFF000000 or it.toLong()) },
             )
+            if (info.passenger) Text("👥 조수석 동승자 감지 · 2인 비행", color = Palette.accent, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
             Text("핸들로 좌우, 브레이크를 밟으면 아래로. 기어를 바꾸면 바로 멈추고 원래 설정으로 돌아가요", color = Palette.muted, fontSize = 13.sp)
             Button(
@@ -154,6 +159,34 @@ fun RaceScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.surface, contentColor = Palette.text),
             ) { Text("레이스 그만하기", fontSize = 19.sp) }
         }
+    }
+}
+
+private fun dirLabel(d: ai.pleos.playground.vehicle.constant.control.FanDirectionType) = when (d) {
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.FACE -> "얼굴"
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.FLOOR -> "발"
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.FACE_AND_FLOOR -> "얼굴+발"
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.DEFROST -> "앞유리"
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.FACE_AND_DEFROST -> "얼굴+앞유리"
+    ai.pleos.playground.vehicle.constant.control.FanDirectionType.DEFROST_AND_FLOOR -> "앞유리+발"
+    else -> "전체"
+}
+
+/** 4D 패널: 두 항목을 한 줄에 */
+@Composable
+private fun MiniRow(l1: String, v1: String?, h1: Boolean, l2: String, v2: String?, h2: Boolean) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MiniCell(l1, v1, h1, Modifier.weight(1f))
+        MiniCell(l2, v2, h2, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MiniCell(label: String, value: String?, highlight: Boolean, modifier: Modifier) {
+    val bg by animateColorAsState(if (highlight) Palette.accent.copy(alpha = 0.25f) else Palette.surface, tween(250), label = "cell")
+    Column(modifier.clip(RoundedCornerShape(12.dp)).background(bg).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Text(label, color = Palette.muted, fontSize = 13.sp)
+        Text(value ?: "—", color = Palette.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
