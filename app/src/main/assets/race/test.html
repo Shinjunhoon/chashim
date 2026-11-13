@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;overflow:hidden">
+<script src="three.min.js"></script>
+<script>
+const Q=new URLSearchParams(location.search);
+const r=new THREE.WebGLRenderer({antialias:!Q.has('noaa'),alpha:Q.has('alpha')});
+r.setPixelRatio(Q.has('dpr1')?1:Math.min(devicePixelRatio,1.25)); r.setSize(innerWidth,innerHeight); document.body.appendChild(r.domElement);
+const s=new THREE.Scene(), c=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100); c.position.z=4;
+s.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
+const m=new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.5),new THREE.MeshStandardMaterial({color:0xff8800,flatShading:true})); s.add(m);
+r.setClearColor(0x2266aa,1);
+function f(){ if(r.getSize(new THREE.Vector2()).x!==innerWidth&&innerWidth>0){r.setSize(innerWidth,innerHeight);c.aspect=innerWidth/innerHeight;c.updateProjectionMatrix();}
+ m.rotation.x+=0.01;m.rotation.y+=0.02;r.render(s,c);requestAnimationFrame(f)} f();
+console.log('cube '+innerWidth+'x'+innerHeight+' '+location.search);
+</script></body></html>
