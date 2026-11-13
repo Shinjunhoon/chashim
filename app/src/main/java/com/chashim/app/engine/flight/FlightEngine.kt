@@ -39,8 +39,10 @@ private const val MIN_CMD_MS = 300L
 
 enum class Mark { PENDING, HIT, MISS }
 
-data class RingView(val x: Float, val k: Float, val mark: Mark)
-data class CloudView(val x: Float, val w: Float, val k: Float, val hit: Boolean?)
+/** 별빛을 받았다고 볼 거리 (-1~1 기준) */
+private const val STAR_HIT = 0.15f
+/** 별빛을 받으면 무드등이 이 색으로 잠깐 반짝인다 */
+private const val STAR_GOLD = 0xFFD45A
 
 /** chosenLeft: 아직 안 골랐으면 null */
 data class ForkView(val leftLabel: String, val rightLabel: String, val secLeft: Int, val chosenLeft: Boolean?)
@@ -56,8 +58,14 @@ data class FlightHud(
     val aim: Float = 0f,
     /** 실제 핸들 각도 */
     val steerDeg: Float = 0f,
-    val rings: List<RingView> = emptyList(),
-    val clouds: List<CloudView> = emptyList(),
+    /** 현재 구간의 링·먹구름·별빛 판정 결과와 판정 시각 (화면이 매 프레임 위치를 계산해 그린다) */
+    val ringMarks: List<Mark> = emptyList(),
+    val ringAt: List<Float> = emptyList(),
+    val cloudHit: List<Boolean?> = emptyList(),
+    val starMarks: List<Mark> = emptyList(),
+    val starAt: List<Float> = emptyList(),
+    val starsCaught: Int = 0,
+    val starsTotal: Int = 0,
     val score: Int = 0,
     val combo: Int = 0,
     val ringsHit: Int = 0,
@@ -83,6 +91,8 @@ sealed interface FlightPhase {
         val score: Int,
         val ringsHit: Int,
         val ringsTotal: Int,
+        val starsCaught: Int,
+        val starsTotal: Int,
         val route: List<String>,
         val best: Int,
         val newBest: Boolean,
@@ -189,6 +199,8 @@ class FlightEngine(
                 var combo = 0
                 var hits = 0
                 var ringsTotal = 0
+                var starsCaught = 0
+                var starsTotal = 0
                 while (seg != null) {
                     val s = seg
                     route += s.title
@@ -196,6 +208,9 @@ class FlightEngine(
                     val pendingEffects = s.effects.sortedBy { it.at }.toMutableList()
                     val ringMarks = MutableList(s.rings.size) { Mark.PENDING }
                     val cloudHit = MutableList<Boolean?>(s.clouds.size) { null }
+                    val ringAt = MutableList(s.rings.size) { 0f }
+                    val starMarks = MutableList(s.stars.size) { Mark.PENDING }
+                    val starAt = MutableList(s.stars.size) { 0f }
                     var chosen: String? = null
                     var chosenAt = 0f
                     var t = 0f
@@ -224,6 +239,7 @@ class FlightEngine(
                         s.rings.forEachIndexed { i, r ->
                             if (ringMarks[i] == Mark.PENDING && t >= r.t) {
                                 ringsTotal++
+                                ringAt[i] = t
                                 if (abs(aim - r.x) <= RING_HIT) {
                                     ringMarks[i] = Mark.HIT
                                     hits++
@@ -243,6 +259,28 @@ class FlightEngine(
                                     toast("링을 놓쳤어요", false)
                                 }
                                 Log.i(TAG, "ring ${s.id}#$i x=${r.x} aim=${"%.2f".format(aim)} → ${ringMarks[i]}")
+                            }
+                        }
+                        // 별빛 판정
+                        s.stars.forEachIndexed { i, st ->
+                            if (starMarks[i] == Mark.PENDING && t >= st.t) {
+                                starsTotal++
+                                starAt[i] = t
+                                if (abs(aim - st.x) <= STAR_HIT) {
+                                    starMarks[i] = Mark.HIT
+                                    starsCaught++
+                                    score += if (st.big) 150 else 50
+                                    if (st.big) {
+                                        toast("황금 별 +150", true)
+                                        pulseAmbient(0xFFFFFF, 500)
+                                        burst(baseFan + 2, 800)
+                                    } else {
+                                        pulseAmbient(STAR_GOLD, 350)
+                                    }
+                                } else {
+                                    starMarks[i] = Mark.MISS
+                                }
+                                Log.i(TAG, "star ${s.id}#$i x=${st.x} aim=${"%.2f".format(aim)} → ${starMarks[i]}")
                             }
                         }
                         // 먹구름 판정
@@ -280,14 +318,9 @@ class FlightEngine(
 
                         hud = hud.copy(
                             segment = s, segT = t, aim = aim, steerDeg = deg,
-                            rings = s.rings.mapIndexedNotNull { i, r ->
-                                val k = 1f - (r.t - t) / RING_LEAD_SEC
-                                if (k < 0f || t > r.t + 0.6f) null else RingView(r.x, k.coerceAtMost(1f), ringMarks[i])
-                            },
-                            clouds = s.clouds.mapIndexedNotNull { i, c ->
-                                val k = 1f - (c.t - t) / RING_LEAD_SEC
-                                if (k < 0f || t > c.t + 0.6f) null else CloudView(c.x, c.w, k.coerceAtMost(1f), cloudHit[i])
-                            },
+                            ringMarks = ringMarks.toList(), ringAt = ringAt.toList(), cloudHit = cloudHit.toList(),
+                            starMarks = starMarks.toList(), starAt = starAt.toList(),
+                            starsCaught = starsCaught, starsTotal = starsTotal,
                             score = score, combo = combo, ringsHit = hits, ringsTotal = ringsTotal,
                             fork = forkView, hover = hover, toast = pendingToast ?: hud.toast,
                             elapsed = elapsed,
@@ -310,17 +343,18 @@ class FlightEngine(
                 val best = prefs.getInt("best_${course.id}", 0)
                 val newBest = score > best
                 if (newBest) prefs.edit().putInt("best_${course.id}", score).apply()
-                pendingResult = FlightPhase.Result(score, hits, ringsTotal, route, maxOf(best, score), newBest, stopReason)
+                pendingResult = FlightPhase.Result(score, hits, ringsTotal, starsCaught, starsTotal, route, maxOf(best, score), newBest, stopReason)
                 guard.cancel()
             } finally {
                 withContext(NonCancellable) {
                     // 돌풍이 복구 뒤에 바람을 덮어쓰지 않도록 먼저 끝낸다
                     burstJob?.cancelAndJoin()
+                    ambientJob?.cancelAndJoin()
                     _phase.value = FlightPhase.Restoring
                     snapshot?.let { vehicle.restore(it) }
                     val h = _hud.value
                     _phase.value = pendingResult ?: FlightPhase.Result(
-                        h.score, h.ringsHit, h.ringsTotal, route, prefs.getInt("best_${course.id}", 0), false, stopReason,
+                        h.score, h.ringsHit, h.ringsTotal, h.starsCaught, h.starsTotal, route, prefs.getInt("best_${course.id}", 0), false, stopReason,
                     )
                     pendingResult = null
                     hovering = false
@@ -370,6 +404,29 @@ class FlightEngine(
         }
     }
 
+    private var ambientJob: Job? = null
+    private var lastAmbientCmd = 0L
+    /** 지금 구간의 무드등 색 (반짝인 뒤 돌아갈 색) */
+    private var sceneAmbient: Int? = null
+
+    /** 별빛을 받으면 무드등이 잠깐 반짝이고 구간 색으로 돌아간다 */
+    private fun pulseAmbient(color: Int, ms: Long) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastAmbientCmd < MIN_CMD_MS) return
+        lastAmbientCmd = now
+        ambientJob?.cancel()
+        ambientJob = scope.launch {
+            try {
+                vehicle.setAmbientColor(color)?.let { r -> _effects.update { it.copy(ambient = r, lastChanged = "ambient") } }
+                delay(ms)
+            } finally {
+                withContext(NonCancellable) {
+                    sceneAmbient?.let { c -> vehicle.setAmbientColor(c)?.let { r -> _effects.update { it.copy(ambient = r) } } }
+                }
+            }
+        }
+    }
+
     /** 브레이크 호버링: 바람을 1단으로 줄이고, 떼면 원래대로 */
     private fun setHover(on: Boolean) {
         hovering = on
@@ -404,8 +461,10 @@ class FlightEngine(
             }
             is Effect.SeatHeat ->
                 vehicle.setSeatHeat(e.level)?.let { r -> _effects.update { it.copy(seatHeat = r, lastChanged = "seat") } }
-            is Effect.Ambient ->
+            is Effect.Ambient -> {
+                sceneAmbient = e.color
                 vehicle.setAmbientColor(e.color)?.let { r -> _effects.update { it.copy(ambient = r, ambientName = e.name, lastChanged = "ambient") } }
+            }
             is Effect.Fan ->
                 vehicle.setFan(e.level)?.let { r -> _effects.update { it.copy(fan = r, lastChanged = "fan") } }
             // 비행 코스에서는 에어컨 온도를 바꾸지 않는다

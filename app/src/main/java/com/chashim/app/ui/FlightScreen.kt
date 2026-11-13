@@ -64,8 +64,6 @@ import kotlin.random.Random
 
 /** 영상을 화면보다 이만큼 크게 띄워 두고, 핸들에 따라 보이는 영역을 옮긴다 */
 private const val OVERSCAN = 1.18f
-/** 조준점이 움직이는 범위: 화면 가로의 ±40% */
-private const val AIM_RANGE = 0.4f
 
 @Composable
 fun FlightScreen(
@@ -108,7 +106,7 @@ fun FlightScreen(
                     rotationZ = -aim * 8f
                 },
             )
-            Overlay(hud, Modifier.fillMaxSize())
+            FlightCanvas(hud, Modifier.fillMaxSize())
 
             // 위: 점수, 구간
             Row(
@@ -122,7 +120,7 @@ fun FlightScreen(
                     Text("점수", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
                     Text("${hud.score}", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "링 ${hud.ringsHit}/${hud.ringsTotal}" + if (hud.combo >= 2) " · 콤보 ${hud.combo}" else "",
+                        "링 ${hud.ringsHit}/${hud.ringsTotal} · 별빛 ${hud.starsCaught}/${hud.starsTotal}" + if (hud.combo >= 2) " · 콤보 ${hud.combo}" else "",
                         color = Palette.accent, fontSize = 18.sp,
                     )
                 }
@@ -218,49 +216,6 @@ private fun SteerCard(deg: Float, hover: Boolean) {
     }
 }
 
-/** 링·먹구름·조준점 */
-@Composable
-private fun Overlay(hud: FlightHud, modifier: Modifier) {
-    Canvas(modifier) {
-        val cx = size.width / 2
-        val cy = size.height * 0.48f
-        fun sx(x: Float) = cx + x * size.width * AIM_RANGE
-        val rFar = size.height * 0.02f
-        val rNear = size.height * 0.13f
-
-        hud.clouds.forEach { c ->
-            val k = c.k * c.k
-            val x = sx(c.x)
-            val halfW = (c.w / 2) * size.width * AIM_RANGE * (0.15f + 0.85f * k)
-            val col = when (c.hit) { true -> Color(0xFFB03030); else -> Color(0xFF2A2F3A) }
-            val a = if (c.hit == null) 0.35f + 0.5f * k else 0.6f
-            for (i in -2..2) {
-                drawCircle(col.copy(alpha = a), radius = halfW * 0.55f, center = Offset(x + i * halfW * 0.38f, cy + (if (i % 2 == 0) 0f else -halfW * 0.2f)))
-            }
-        }
-        hud.rings.forEach { r ->
-            val k = r.k * r.k
-            val radius = rFar + (rNear - rFar) * k
-            val col = when (r.mark) {
-                Mark.PENDING -> Color(0xFFFFD54F)
-                Mark.HIT -> Color(0xFF7FD6A8)
-                Mark.MISS -> Color(0xFFEF5350)
-            }
-            val a = if (r.mark == Mark.PENDING) 0.4f + 0.6f * r.k else 0.9f
-            drawCircle(col.copy(alpha = a), radius = radius, center = Offset(sx(r.x), cy), style = Stroke(width = 6f + 10f * k))
-        }
-        // 조준점
-        val ax = sx(hud.aim)
-        val c = Color.White
-        drawCircle(c, radius = 26f, center = Offset(ax, cy), style = Stroke(4f))
-        drawCircle(c, radius = 5f, center = Offset(ax, cy))
-        drawLine(c, Offset(ax - 52f, cy), Offset(ax - 32f, cy), 4f)
-        drawLine(c, Offset(ax + 32f, cy), Offset(ax + 52f, cy), 4f)
-        drawLine(c, Offset(ax, cy - 52f), Offset(ax, cy - 32f), 4f)
-        drawLine(c, Offset(ax, cy + 32f), Offset(ax, cy + 52f), 4f)
-    }
-}
-
 @Composable
 private fun ForkBanner(f: com.chashim.app.engine.flight.ForkView, modifier: Modifier) {
     Row(
@@ -291,8 +246,9 @@ private fun ToastView(id: Int, text: String, good: Boolean, modifier: Modifier) 
         Text(
             text,
             color = (if (good) Palette.accent else Color(0xFFFF8A80)).copy(alpha = alpha.value),
-            fontSize = 40.sp, fontWeight = FontWeight.Bold,
-            modifier = modifier.graphicsLayer { scaleX = 1f + 0.1f * alpha.value; scaleY = scaleX },
+            fontSize = 32.sp, fontWeight = FontWeight.SemiBold,
+            style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 2f), 12f)),
+            modifier = modifier.graphicsLayer { scaleX = 1f + 0.06f * alpha.value; scaleY = scaleX },
         )
     }
 }
@@ -374,6 +330,7 @@ fun FlightResultScreen(result: FlightPhase.Result, onHome: () -> Unit, onAgain: 
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Stat("점수", "${result.score}", if (result.newBest) "최고 기록!" else "최고 ${result.best}")
             Stat("링 통과", "${result.ringsHit}/${result.ringsTotal}", null)
+            Stat("별빛", "${result.starsCaught}/${result.starsTotal}", null)
         }
         Spacer(Modifier.height(20.dp))
         Text("비행 경로: " + result.route.joinToString(" → "), color = Palette.text, fontSize = 20.sp)

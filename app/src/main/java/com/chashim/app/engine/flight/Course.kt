@@ -11,6 +11,9 @@ data class Ring(val t: Float, val x: Float)
 /** 먹구름: t초에 도달. 조준점이 x ± w/2 안이면 충돌 */
 data class Cloud(val t: Float, val x: Float, val w: Float)
 
+/** 별빛: 하늘에서 떨어져 t초에 조준점 높이에 닿는다. big이면 황금 별 (점수 3배, 바람 반응) */
+data class Star(val t: Float, val x: Float, val big: Boolean = false)
+
 /** 갈림길: 구간의 at초부터 windowSec초 동안 핸들을 크게 꺾어 고른다. 안 고르면 left */
 data class Fork(
     val at: Float,
@@ -31,6 +34,7 @@ data class Segment(
     val glow: Long,
     val rings: List<Ring> = emptyList(),
     val clouds: List<Cloud> = emptyList(),
+    val stars: List<Star> = emptyList(),
     /** 구간 기본 4D 효과 (힐링 모드와 같은 효과 정의를 쓴다) */
     val effects: List<Effect> = emptyList(),
     val fork: Fork? = null,
@@ -51,6 +55,9 @@ data class Course(
 /** 링이 처음 보이는 시점: 도달 몇 초 전 */
 const val RING_LEAD_SEC = 3f
 
+/** 별빛이 화면 위에서 조준점 높이까지 떨어지는 시간 */
+const val STAR_FALL_SEC = 2.4f
+
 /**
  * 엔터테인 모드 "제주 하늘 비행" (약 2분 30초).
  * 이륙 → 해안 (링 3개, 갈림길) → 폭포 또는 오름 (링 2개) → 한라산 구름 위 (먹구름 2개, 급강하 링 3개) → 일출 착륙.
@@ -65,6 +72,7 @@ val JejuFlight = Course(
         Segment(
             id = "takeoff", title = "이륙", caption = "바다 위로 날아올라요",
             video = "jeju_flight/01_takeoff.mp4", durationSec = 10, glow = 0xFF2B6C8F,
+            stars = listOf(Star(5f, 0f), Star(8f, 0.3f)),
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x4FB4E8, name = "하늘 파랑"),
                 Effect.Gust(at = 1, plus = 2, seconds = 6),
@@ -74,6 +82,7 @@ val JejuFlight = Course(
         Segment(
             id = "coast", title = "해안 비행", caption = "핸들로 조준점을 움직여 링을 통과하세요",
             video = "jeju_flight/02_coast.mp4", durationSec = 36, glow = 0xFF1F6F8B,
+            stars = listOf(Star(4f, 0.2f), Star(10f, -0.1f), Star(16f, 0.45f), Star(22f, -0.25f), Star(27.5f, 0.3f, big = true)),
             rings = listOf(Ring(7f, -0.35f), Ring(13f, 0.4f), Ring(19f, 0f), Ring(25f, -0.5f)),
             effects = listOf(
                 Effect.Window(at = 2, percent = 10),
@@ -88,6 +97,7 @@ val JejuFlight = Course(
         Segment(
             id = "waterfall", title = "폭포 통과", caption = "물보라가 앞유리에 튀어요",
             video = "jeju_flight/03a_waterfall.mp4", durationSec = 22, glow = 0xFF2E6B5A,
+            stars = listOf(Star(4.5f, -0.35f), Star(11.5f, 0.15f), Star(18.5f, 0.4f, big = true)),
             rings = listOf(Ring(8f, 0.45f), Ring(15f, -0.25f)),
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x38D0A0, name = "물빛 초록"),
@@ -99,6 +109,7 @@ val JejuFlight = Course(
         Segment(
             id = "ridge", title = "오름 능선 활강", caption = "능선을 따라 바람이 불어요",
             video = "jeju_flight/03b_ridge.mp4", durationSec = 22, glow = 0xFF4E6B2E,
+            stars = listOf(Star(4f, 0.3f), Star(10.5f, -0.15f), Star(18f, -0.4f, big = true)),
             rings = listOf(Ring(7f, -0.45f), Ring(14f, 0.45f)),
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0x8CCB4A, name = "능선 연두"),
@@ -111,6 +122,7 @@ val JejuFlight = Course(
         Segment(
             id = "halla", title = "한라산 구름 위", caption = "먹구름을 피하고, 구름을 뚫고 급강하!",
             video = "jeju_flight/04_clouds.mp4", durationSec = 30, glow = 0xFF5A6B80,
+            stars = listOf(Star(4f, 0.4f), Star(10f, 0.2f), Star(16.5f, -0.2f, big = true)),
             clouds = listOf(Cloud(7f, 0f, 0.5f), Cloud(13f, -0.45f, 0.45f)),
             rings = listOf(Ring(20f, 0.35f), Ring(23f, 0f), Ring(26f, -0.35f)),
             effects = listOf(
@@ -122,8 +134,12 @@ val JejuFlight = Course(
             next = "landing",
         ),
         Segment(
-            id = "landing", title = "일출 착륙", caption = "해가 떠올라요. 천천히 내려갈게요",
+            id = "landing", title = "일출 착륙", caption = "별빛이 쏟아져요. 모두 받아 보세요",
             video = "jeju_flight/05_sunrise.mp4", durationSec = 24, glow = 0xFF8F5A2B,
+            stars = listOf(
+                Star(3f, -0.3f), Star(4.5f, 0f), Star(6f, 0.3f), Star(8f, 0.45f), Star(9.5f, 0.15f),
+                Star(11f, -0.15f), Star(12.5f, -0.45f), Star(14.5f, -0.2f), Star(16f, 0.1f), Star(18.5f, 0f, big = true),
+            ),
             effects = listOf(
                 Effect.Ambient(at = 0, color = 0xFF9A3C, name = "일출 주황"),
                 Effect.SeatHeat(at = 3, level = 1),
