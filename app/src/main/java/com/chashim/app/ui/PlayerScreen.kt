@@ -223,7 +223,7 @@ private fun ChargeBar(battery: Int, charge: com.chashim.app.engine.ChargeEstimat
 }
 
 @Composable
-private fun EffectRow(icon: String, label: String, value: String?, highlight: Boolean, swatch: Color? = null) {
+internal fun EffectRow(icon: String, label: String, value: String?, highlight: Boolean, swatch: Color? = null) {
     val bg by animateColorAsState(if (highlight) Palette.accent.copy(alpha = 0.25f) else Palette.surface, tween(600), label = "row")
     Row(
         Modifier

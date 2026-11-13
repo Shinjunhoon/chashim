@@ -41,6 +41,8 @@ fun HomeScreen(
     battery: Int?,
     charge: com.chashim.app.engine.ChargeEstimate?,
     onStart: () -> Unit,
+    course: com.chashim.app.engine.flight.Course,
+    onFly: () -> Unit,
 ) {
     val parked = gear == VehicleGear.GEAR_PARK
     // 충전구를 꽂으면 안내창을 띄운다. "나중에"를 누르면 다음 충전 때까지 숨긴다
@@ -72,12 +74,12 @@ fun HomeScreen(
             battery?.let { StatusChip("배터리 $it%", ok = true) }
         }
 
-        Spacer(Modifier.height(32.dp))
-        // 테마 카드
+        Spacer(Modifier.height(28.dp))
+        // 힐링 모드 카드
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(300.dp)
+                .height(260.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(Brush.linearGradient(listOf(Color(0xFF1E4D3B), Color(0xFF0E2430)))),
         ) {
@@ -110,8 +112,46 @@ fun HomeScreen(
                 Text("시작하기", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
         }
+
+        Spacer(Modifier.height(20.dp))
+        // 엔터테인 모드 카드
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF1B4F7A), Color(0xFF3A2A5C)))),
+        ) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(32.dp),
+            ) {
+                Text("엔터테인", color = Color(0xFF8EC9FF), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(course.title, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Text(course.subtitle, color = Color.White.copy(alpha = 0.75f), fontSize = 20.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "핸들로 링을 통과하고, 브레이크로 호버링해요 · 링을 통과할 때마다 바람이 불어요",
+                    color = Color.White.copy(alpha = 0.6f), fontSize = 17.sp,
+                )
+            }
+            Button(
+                onClick = onFly,
+                enabled = ready && parked,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(32.dp)
+                    .height(72.dp)
+                    .width(220.dp),
+                shape = RoundedCornerShape(36.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8EC9FF), contentColor = Palette.bg),
+            ) {
+                Text("비행 시작", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
-    if (charging && ready && parked && !dismissed) {
+    if (charging && ready && parked && !dismissed && (battery == null || battery < com.chashim.app.engine.CHARGE_TARGET)) {
         ChargePrompt(battery = battery, charge = charge, onStart = onStart, onLater = { dismissed = true })
     }
     }

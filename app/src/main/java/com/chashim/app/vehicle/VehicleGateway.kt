@@ -12,6 +12,8 @@ import ai.pleos.playground.vehicle.listener.EvBatteryLevelListener
 import ai.pleos.playground.vehicle.listener.EvBatteryStateOfChargeListener
 import ai.pleos.playground.vehicle.listener.EvChargePortOpenListener
 import ai.pleos.playground.vehicle.listener.GearSelectionListener
+import ai.pleos.playground.vehicle.listener.BrakePedalStatusListener
+import ai.pleos.playground.vehicle.listener.SteeringWheelAngleListener
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +71,25 @@ class VehicleGateway(context: Context) {
     private val gear = vehicle.getGear()
     private val ev = vehicle.getEvBattery()
     private val light = vehicle.getLight()
+    private val steering by lazy { vehicle.getSteeringWheel() }
+    private val brakeApi by lazy { vehicle.getBrake() }
+
+    /** 핸들 각도 (도). 엔터테인 모드 조종에 쓴다 */
+    private val _steering = MutableStateFlow(0f)
+    val steeringDeg: StateFlow<Float> = _steering.asStateFlow()
+
+    /** 브레이크 페달을 밟고 있는지 */
+    private val _brake = MutableStateFlow(false)
+    val brakePressed: StateFlow<Boolean> = _brake.asStateFlow()
+
+    private val steeringListener = object : SteeringWheelAngleListener {
+        override fun onSteeringWheelAngleUpdated(angle: Float?) { angle?.let { _steering.value = it } }
+        override fun onFailed(e: Exception) = warn("핸들 각도 감지", e)
+    }
+    private val brakeListener = object : BrakePedalStatusListener {
+        override fun onBrakePedalStatusUpdated(status: Boolean?) { _brake.value = status == true }
+        override fun onFailed(e: Exception) = warn("브레이크 감지", e)
+    }
 
     var caps = Capabilities()
         private set
@@ -123,6 +144,8 @@ class VehicleGateway(context: Context) {
         runCatching { ev.registerEvChargePortOpen(chargeListener) }
         runCatching { ev.registerEvBatteryStateOfCharge(socListener) }
         runCatching { ev.registerEvBatteryLevel(levelListener) }
+        runCatching { steering.registerSteeringWheelAngle(steeringListener) }.onFailure { Log.w(TAG, "핸들 등록 실패 $it") }
+        runCatching { brakeApi.registerBrakePedalStatus(brakeListener) }.onFailure { Log.w(TAG, "브레이크 등록 실패 $it") }
     }
 
     /** 앱이 켜질 때 공조 등이 아직 준비 안 돼 못 받은 정보가 있으면 다시 받는다 */
@@ -141,6 +164,8 @@ class VehicleGateway(context: Context) {
         runCatching { ev.unregisterEvChargePortOpen(chargeListener) }
         runCatching { ev.unregisterEvBatteryStateOfCharge(socListener) }
         runCatching { ev.unregisterEvBatteryLevel(levelListener) }
+        runCatching { steering.unregisterSteeringWheelAngle(steeringListener) }
+        runCatching { brakeApi.unregisterBrakePedalStatus(brakeListener) }
         vehicle.release()
     }
 
