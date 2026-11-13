@@ -83,7 +83,7 @@ fun FlightCanvas(hud: FlightHud, modifier: Modifier = Modifier) {
 
         val w = size.width
         val h = size.height
-        val vp = Offset(w / 2, h * 0.30f)        // 지평선 소실점
+        val vp = Offset(w / 2, h * seg.horizon)  // 영상 속 지평선의 소실점
         fun sx(x: Float) = w / 2 + x * w * AIM_RANGE
         fun sy(v: Float) = h * (TOP_Y + SPAN_Y * v)
         fun project(x: Float, v: Float, s: Float) = Offset(vp.x + (sx(x) - vp.x) * s, vp.y + (sy(v) - vp.y) * s)
@@ -140,62 +140,70 @@ fun FlightCanvas(hud: FlightHud, modifier: Modifier = Modifier) {
 private fun perspective(d: Float): Float = if (d >= 0) 1f / (1f + 5f * d) else 1f + (-d) * 3.5f
 
 /**
- * 지평선에서 다가오는 빛의 띠. 지금 위치(가장 가깝고 넓음)부터 LEAD_SEC 뒤(멀고 좁음)까지 이어 그린다.
- * 띠 위로 바람 입자가 흘러온다. 조준점이 띠 안에 있으면 더 밝게 빛난다.
+ * 바람길: 지평선에서 다가오는 오로라 같은 빛줄기 다발.
+ * 딱딱한 면 없이 가는 빛줄기 여러 가닥을 겹쳐 그린다. 가운데는 밝고 가장자리로 갈수록 옅어진다.
+ * 가닥마다 조금씩 물결치며, 조준점이 바람길 안에 있으면 더 밝아진다.
  */
 private fun DrawScope.windRibbon(
     seg: Segment, lt: Float, project: (Float, Float, Float) -> Offset, w: Float, h: Float, visible: Float, glow: Float,
 ) {
     if (visible <= 0f) return
-    val n = 30
-    val left = ArrayList<Offset>(n + 1)
-    val right = ArrayList<Offset>(n + 1)
-    val center = ArrayList<Offset>(n + 1)
+    val n = 36
+    val centers = ArrayList<Offset>(n + 1)
+    val halves = FloatArray(n + 1)
     for (k in 0..n) {
         val d = k / n.toFloat()                // 0 = 지금, 1 = 멀리
-        val tau = lt + d * LEAD_SEC
-        val (x, v) = seg.windAt(tau)
+        val (x, v) = seg.windAt(lt + d * LEAD_SEC)
         val s = perspective(d)
-        val c = project(x, v, s)
-        val half = WIND_HALF_X * w * AIM_RANGE * s
-        center += c
-        left += c - Offset(half, 0f)
-        right += c + Offset(half, 0f)
+        centers += project(x, v, s)
+        halves[k] = WIND_HALF_X * w * AIM_RANGE * s
     }
-    // 띠 면: 가까울수록 진하게 (조각마다 투명도를 달리 그린다)
+    fun fade(d: Float) = (1f - d) * (1f - d) * 0.85f + 0.15f * (1f - d)   // 멀수록 옅게
+    val bright = 0.6f + 0.4f * glow
+
+    // 1) 바탕: 밝은 배경(파도·구름)에서도 보이도록 아주 옅은 그림자를 깔고, 그 위에 하늘빛 안개
     for (k in 0 until n) {
         val d = k / n.toFloat()
-        val a = (0.05f + 0.13f * (1f - d) + 0.12f * glow * (1f - d)) * visible
-        val path = Path().apply {
-            moveTo(left[k].x, left[k].y); lineTo(left[k + 1].x, left[k + 1].y)
-            lineTo(right[k + 1].x, right[k + 1].y); lineTo(right[k].x, right[k].y); close()
-        }
-        drawPath(path, Wind.copy(alpha = a))
+        drawLine(
+            Color(0xFF06222E).copy(alpha = 0.16f * fade(d) * visible),
+            centers[k], centers[k + 1], strokeWidth = halves[k] * 2.6f, cap = StrokeCap.Butt,
+        )
+        drawLine(
+            Wind.copy(alpha = 0.12f * fade(d) * visible * bright),
+            centers[k], centers[k + 1], strokeWidth = halves[k] * 2.0f, cap = StrokeCap.Butt,
+        )
     }
-    // 가장자리와 가운데 선
-    for (edge in listOf(left, right)) {
-        for (k in 0 until n) {
+    // 2) 빛줄기 가닥
+    val strands = 11
+    for (j in 0 until strands) {
+        val f = j / (strands - 1f) * 2f - 1f         // -1 ~ 1 (가장자리 ~ 가운데 ~ 가장자리)
+        val profile = 1f - f * f                       // 가운데가 밝다
+        val phase = j * 1.7f
+        var prev: Offset? = null
+        for (k in 0..n) {
             val d = k / n.toFloat()
-            drawLine(Wind.copy(alpha = (0.15f + 0.45f * (1f - d)) * visible), edge[k], edge[k + 1], strokeWidth = 1f + 2.5f * (1f - d))
+            val wave = sin(d * 9f - lt * 2.4f + phase) * halves[k] * 0.12f
+            val p = centers[k] + Offset(f * halves[k] * 0.9f, wave)
+            prev?.let { q ->
+                val a = (0.18f + 0.5f * profile) * fade(d) * visible * bright
+                drawLine(lerp(Wind, Color.White, profile).copy(alpha = a), q, p, strokeWidth = 1f + 2.6f * (1f - d) * (0.4f + 0.6f * profile), cap = StrokeCap.Round)
+            }
+            prev = p
         }
     }
-    for (k in 0 until n) {
-        val d = k / n.toFloat()
-        drawLine(Color.White.copy(alpha = (0.1f + 0.35f * glow) * (1f - d) * visible), center[k], center[k + 1], strokeWidth = 1f + 3f * (1f - d))
-    }
-    // 흘러오는 바람 입자: 멀리서 가까이로
-    for (i in 0 until 26) {
+    // 3) 흘러오는 빛 알갱이: 멀리서 가까이로
+    for (i in 0 until 22) {
         val seed = (i * 0.618034f) % 1f
-        val side = ((i * 0.382f) % 1f) * 2f - 1f
-        val d = 1f - ((lt * 0.55f + seed) % 1f)  // 1 → 0 으로 다가온다
-        val tau = lt + d * LEAD_SEC
-        val (x, v) = seg.windAt(tau)
-        val s = perspective(d)
-        val p = project(x, v, s) + Offset(side * WIND_HALF_X * w * AIM_RANGE * s * 0.85f, 0f)
-        val (x2, v2) = seg.windAt(tau + 0.15f)
-        val s2 = perspective(d + 0.05f)
-        val q = project(x2, v2, s2) + Offset(side * WIND_HALF_X * w * AIM_RANGE * s2 * 0.85f, 0f)
-        drawLine(Color.White.copy(alpha = (0.5f * (1f - d) + 0.1f) * visible), q, p, strokeWidth = 1.5f + 3f * (1f - d), cap = StrokeCap.Round)
+        val f = ((i * 0.382f) % 1f) * 2f - 1f
+        val d = 1f - ((lt * 0.5f + seed) % 1f)
+        val k = (d * n).toInt().coerceIn(0, n - 1)
+        val c = centers[k] + (centers[k + 1] - centers[k]) * (d * n - k)
+        val p = c + Offset(f * halves[k] * 0.8f, 0f)
+        val a = (1f - f * f) * fade(d) * 0.8f * visible * bright
+        drawCircle(
+            Brush.radialGradient(listOf(Color.White.copy(alpha = a), Color.Transparent), center = p, radius = 3f + 9f * (1f - d)),
+            radius = 3f + 9f * (1f - d), center = p,
+        )
     }
 }
 

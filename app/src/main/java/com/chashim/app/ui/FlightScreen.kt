@@ -32,6 +32,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +63,12 @@ import com.chashim.app.engine.flight.FlightPhase
 import com.chashim.app.engine.flight.Mark
 import kotlin.math.max
 import kotlin.random.Random
+
+/** 영상 위 글씨: 상자 없이 부드러운 그림자로 읽히게 */
+private val HudStyle = androidx.compose.ui.text.TextStyle(
+    color = Color.White,
+    shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.55f), androidx.compose.ui.geometry.Offset(0f, 2f), 14f),
+)
 
 /** 영상을 화면보다 이만큼 크게 띄워 두고, 핸들에 따라 보이는 영역을 옮긴다 */
 private const val OVERSCAN = 1.18f
@@ -82,7 +90,6 @@ fun FlightScreen(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .border(10.dp, Brush.verticalGradient(listOf(glow, glow.copy(alpha = 0.3f))), RectangleShape)
                 .clipToBounds(),
         ) {
             val w = constraints.maxWidth.toFloat()
@@ -106,44 +113,50 @@ fun FlightScreen(
                     rotationZ = -aim * 8f
                 },
             )
+            // 가장자리를 은은하게 어둡게 (화면이 영상에 집중되도록)
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.radialGradient(
+                        0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.55f),
+                        center = androidx.compose.ui.geometry.Offset(w / 2, h / 2), radius = maxOf(w, h) * 0.75f,
+                    ),
+                ),
+            )
             FlightCanvas(hud, Modifier.fillMaxSize())
 
-            // 위: 점수, 구간
-            Row(
-                Modifier.align(Alignment.TopStart).fillMaxWidth().padding(28.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(
-                    Modifier.clip(RoundedCornerShape(18.dp)).background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 22.dp, vertical = 12.dp),
-                ) {
-                    Text("점수", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
-                    Text("${hud.score}", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "바람길 ${hud.windPct}% · 별빛 ${hud.starsCaught}/${hud.starsTotal}" + if (hud.multiplier >= 2) " · 순풍 ×${hud.multiplier}" else "",
-                        color = Palette.accent, fontSize = 18.sp,
-                    )
+            // 점수: 상자 없이 숫자만 크게
+            Column(Modifier.align(Alignment.TopStart).padding(start = 40.dp, top = 30.dp)) {
+                Text("${hud.score}", style = HudStyle.copy(fontSize = 52.sp, fontWeight = FontWeight.Light))
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("★ ${hud.starsCaught}", style = HudStyle.copy(fontSize = 18.sp, color = Color(0xFFFFD98A)))
+                    if (hud.multiplier >= 2) Text("순풍 ×${hud.multiplier}", style = HudStyle.copy(fontSize = 18.sp, color = Color(0xFFA8F0FF)))
                 }
-                Spacer(Modifier.weight(1f))
-                if (hud.diving) Pill("▼ 브레이크 · 내려가는 중", Palette.warn)
             }
 
-            // 알림
-            hud.toast?.let { t -> ToastView(t.id, t.text, t.good, Modifier.align(Alignment.TopCenter).padding(top = 40.dp)) }
+            // 알림 (한 번에 하나, 잠깐)
+            hud.toast?.let { t -> ToastView(t.id, t.text, t.good, Modifier.align(Alignment.TopCenter).padding(top = 36.dp)) }
 
             // 바람길이 숨은 구간: 바람 세기만이 단서
             if (hud.hidden && phase is FlightPhase.Flying) {
-                Pill("🌬️ 바람길이 사라졌어요 · 바람이 세지는 쪽으로", Color(0xFFA8F0FF), Modifier.align(Alignment.TopCenter).padding(top = 100.dp))
+                Text(
+                    "바람길이 숨었어요 · 바람이 세지는 쪽으로",
+                    style = HudStyle.copy(fontSize = 22.sp, color = Color(0xFFA8F0FF).copy(alpha = 0.9f)),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp),
+                )
             }
 
             // 갈림길
             hud.fork?.let { f -> ForkBanner(f, Modifier.align(Alignment.Center).padding(top = 280.dp)) }
 
-            // 아래: 구간 이름
+            // 구간 이름: 구간이 시작될 때 4초만 보여 주고 사라진다
             hud.segment?.let { s ->
-                Column(Modifier.align(Alignment.BottomStart).padding(40.dp)) {
-                    Text(s.title, color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                    Text(s.caption, color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp)
+                val a = if (phase is FlightPhase.Flying) ((4.5f - hud.segT) / 0.8f).coerceIn(0f, 1f) * (hud.segT / 0.4f).coerceIn(0f, 1f) else 1f
+                if (a > 0f) {
+                    Column(Modifier.align(Alignment.BottomStart).padding(start = 40.dp, bottom = 36.dp).graphicsLayer { alpha = a }) {
+                        Text(s.title, style = HudStyle.copy(fontSize = 34.sp, fontWeight = FontWeight.SemiBold))
+                        Spacer(Modifier.height(4.dp))
+                        Text(s.caption, style = HudStyle.copy(fontSize = 20.sp, color = Color.White.copy(alpha = 0.8f)))
+                    }
                 }
             }
 
@@ -325,21 +338,53 @@ private fun Sounds(hud: FlightHud) {
 }
 
 /**
- * 비행 영상. 시야 이동·기울기를 적용하려고 TextureView에 그린다 (SurfaceView는 변형이 안 됨).
- * 영상 비율(16:9)을 유지한 채 화면을 꽉 채운다.
+ * 비행 영상. 구간이 바뀌면 다음 영상을 미리 틀어 두었다가, 첫 화면이 준비되면 1.4초 동안 겹쳐 넘어간다 (끊김 없이).
+ * 시야 이동·기울기를 적용하려고 TextureView에 그린다 (SurfaceView는 변형이 안 됨). 16:9 비율을 유지한 채 화면을 꽉 채운다.
  */
 @Composable
 private fun FlightVideo(path: String?, speed: Float, modifier: Modifier) {
     val context = LocalContext.current
-    val player = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE; volume = 0f } }
-    DisposableEffect(Unit) { onDispose { player.release() } }
-    LaunchedEffect(path) {
-        if (path == null) return@LaunchedEffect
-        player.setMediaItem(MediaItem.fromUri("asset:///$path"))
-        player.prepare()
-        player.play()
+    val players = remember {
+        List(2) { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE; volume = 0f } }
     }
-    LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
+    DisposableEffect(Unit) { onDispose { players.forEach { it.release() } } }
+    var top by remember { mutableIntStateOf(0) }          // 위에 그려지는 영상
+    val topAlpha = remember { Animatable(1f) }
+    var loaded by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(path) {
+        if (path == null || path == loaded) return@LaunchedEffect
+        if (loaded == null) {
+            players[top].apply { setMediaItem(MediaItem.fromUri("asset:///$path")); prepare(); play() }
+            loaded = path
+            return@LaunchedEffect
+        }
+        val next = 1 - top
+        val p = players[next]
+        p.setMediaItem(MediaItem.fromUri("asset:///$path"))
+        p.prepare()
+        p.play()
+        // 다음 영상의 첫 화면이 나올 때까지 기다린다 (최대 1.5초)
+        kotlinx.coroutines.withTimeoutOrNull(1_500) {
+            kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                val l = object : Player.Listener {
+                    override fun onRenderedFirstFrame() {
+                        p.removeListener(this)
+                        if (cont.isActive) cont.resume(Unit) {}
+                    }
+                }
+                p.addListener(l)
+                cont.invokeOnCancellation { p.removeListener(l) }
+            }
+        }
+        val prev = top
+        topAlpha.snapTo(0f)
+        top = next
+        topAlpha.animateTo(1f, tween(1_400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        players[prev].pause()
+        loaded = path
+    }
+    LaunchedEffect(speed) { players.forEach { it.setPlaybackSpeed(speed) } }
 
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
@@ -347,10 +392,16 @@ private fun FlightVideo(path: String?, speed: Float, modifier: Modifier) {
         val ch = constraints.maxHeight.toFloat()
         val vw = max(cw, ch * 16f / 9f)
         val vh = vw * 9f / 16f
-        AndroidView(
-            factory = { TextureView(it).also { tv -> player.setVideoTextureView(tv) } },
-            modifier = modifier.requiredSize(with(density) { vw.toDp() }, with(density) { vh.toDp() }),
-        )
+        val size = Modifier.requiredSize(with(density) { vw.toDp() }, with(density) { vh.toDp() })
+        // 두 영상의 자리는 고정하고, 겹쳐 나타나는 쪽만 위로 올린다 (뷰를 옮기면 화면이 잠깐 까매진다)
+        for (i in 0..1) {
+            AndroidView(
+                factory = { TextureView(it).also { tv -> players[i].setVideoTextureView(tv) } },
+                modifier = modifier.then(size)
+                    .zIndex(if (i == top) 1f else 0f)
+                    .graphicsLayer { alpha = if (i == top) topAlpha.value else 1f },
+            )
+        }
     }
 }
 

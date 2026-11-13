@@ -34,6 +34,8 @@ data class Segment(
     val video: String,
     val durationSec: Int,
     val glow: Long,
+    /** 영상 속 지평선 높이 (화면 세로 비율). 바람길·먹구름이 여기서 다가온다 */
+    val horizon: Float = 0.3f,
     val wind: List<WindKey>,
     val clouds: List<Cloud> = emptyList(),
     val stars: List<Star> = emptyList(),
@@ -87,7 +89,7 @@ const val CLOUD_HALF_V = 0.2f
 /**
  * 엔터테인 모드 "제주 하늘 비행" (약 2분 20초).
  * 핸들(좌우)과 브레이크(밟으면 내려감, 떼면 올라옴)로 바람길에 올라탄다.
- * 바람길 안에 있을수록 실제 차 바람이 세진다. 폭포·능선 구간 중간에는 바람길이 사라져 바람으로만 찾아간다.
+ * 바람길 안에 있을수록 실제 차 바람이 세진다. 협곡·오름 구간 중간에는 바람길이 사라져 바람으로만 찾아간다.
  * 에어컨 온도는 건드리지 않는다.
  */
 val JejuFlight = Course(
@@ -98,7 +100,7 @@ val JejuFlight = Course(
     segments = listOf(
         Segment(
             id = "takeoff", title = "이륙", caption = "빛나는 바람길에 올라타세요",
-            video = "jeju_flight/01_takeoff.mp4", durationSec = 10, glow = 0xFF2B6C8F,
+            video = "jeju_flight/01_takeoff.mp4", durationSec = 10, glow = 0xFF2B6C8F, horizon = 0.24f,
             wind = listOf(WindKey(0f, 0f, 0.1f), WindKey(5f, 0.15f, 0.2f), WindKey(10f, -0.1f, 0.25f)),
             stars = listOf(Star(6f, 0.12f, 0.2f), Star(9f, -0.08f, 0.25f)),
             effects = listOf(Effect.Ambient(at = 0, color = 0x4FB4E8, name = "하늘 파랑")),
@@ -106,7 +108,7 @@ val JejuFlight = Course(
         ),
         Segment(
             id = "coast", title = "해안 비행", caption = "핸들로 좌우, 브레이크를 밟으면 아래로",
-            video = "jeju_flight/02_coast.mp4", durationSec = 36, glow = 0xFF1F6F8B,
+            video = "jeju_flight/02_coast.mp4", durationSec = 36, glow = 0xFF1F6F8B, horizon = 0.16f,
             wind = listOf(
                 WindKey(0f, -0.1f, 0.25f), WindKey(5f, -0.4f, 0.2f), WindKey(10f, 0.3f, 0.45f),
                 WindKey(15f, 0.45f, 0.9f), WindKey(20f, -0.15f, 0.75f), WindKey(25f, -0.5f, 0.2f),
@@ -122,13 +124,13 @@ val JejuFlight = Course(
             ),
             fork = Fork(
                 at = 29f, windowSec = 6f,
-                left = "waterfall", leftLabel = "폭포",
-                right = "ridge", rightLabel = "오름 능선",
+                left = "valley", leftLabel = "협곡",
+                right = "ridge", rightLabel = "오름",
             ),
         ),
         Segment(
-            id = "waterfall", title = "폭포 통과", caption = "바람길이 물보라에 가려져요. 바람으로 찾아보세요",
-            video = "jeju_flight/03a_waterfall.mp4", durationSec = 24, glow = 0xFF2E6B5A,
+            id = "valley", title = "협곡 통과", caption = "깊은 협곡에선 바람길이 숨어요. 바람으로 찾아보세요",
+            video = "jeju_flight/03a_valley.mp4", durationSec = 24, glow = 0xFF2E6B5A, horizon = 0.22f,
             wind = listOf(
                 WindKey(0f, 0f, 0.3f), WindKey(5f, 0.35f, 0.6f), WindKey(10f, 0.25f, 0.95f),
                 WindKey(15f, -0.35f, 0.7f), WindKey(20f, -0.1f, 0.3f), WindKey(24f, 0f, 0.3f),
@@ -136,14 +138,13 @@ val JejuFlight = Course(
             hidden = 7f..17f,
             stars = listOf(Star(4f, 0.3f, 0.55f), Star(20.5f, -0.1f, 0.3f, big = true)),
             effects = listOf(
-                Effect.Ambient(at = 0, color = 0x38D0A0, name = "물빛 초록"),
-                Effect.Wiper(at = 6, seconds = 3),
+                Effect.Ambient(at = 0, color = 0x38D0A0, name = "협곡 초록"),
             ),
             next = "halla",
         ),
         Segment(
-            id = "ridge", title = "오름 능선 활강", caption = "안개 속 바람길. 바람으로 찾아보세요",
-            video = "jeju_flight/03b_ridge.mp4", durationSec = 24, glow = 0xFF4E6B2E,
+            id = "ridge", title = "오름 위 안개", caption = "안개 속에선 바람길이 숨어요. 바람으로 찾아보세요",
+            video = "jeju_flight/03b_ridge.mp4", durationSec = 24, glow = 0xFF4E6B2E, horizon = 0.3f,
             wind = listOf(
                 WindKey(0f, 0f, 0.3f), WindKey(5f, -0.4f, 0.2f), WindKey(10f, -0.15f, 0.85f),
                 WindKey(15f, 0.4f, 0.6f), WindKey(20f, 0.1f, 0.3f), WindKey(24f, 0f, 0.3f),
@@ -155,7 +156,7 @@ val JejuFlight = Course(
         ),
         Segment(
             id = "halla", title = "한라산 구름 위", caption = "먹구름은 아래로 피하고, 구름을 뚫고 급강하!",
-            video = "jeju_flight/04_clouds.mp4", durationSec = 30, glow = 0xFF5A6B80,
+            video = "jeju_flight/04_clouds.mp4", durationSec = 30, glow = 0xFF5A6B80, horizon = 0.32f,
             wind = listOf(
                 WindKey(0f, 0f, 0.3f), WindKey(4f, 0f, 0.8f), WindKey(9f, 0f, 0.85f),
                 WindKey(12f, -0.35f, 0.45f), WindKey(15f, -0.3f, 0.3f), WindKey(18f, 0f, 0.15f),
@@ -172,7 +173,7 @@ val JejuFlight = Course(
         ),
         Segment(
             id = "landing", title = "일출 착륙", caption = "별빛이 쏟아져요. 모두 받아 보세요",
-            video = "jeju_flight/05_sunrise.mp4", durationSec = 24, glow = 0xFF8F5A2B,
+            video = "jeju_flight/05_sunrise.mp4", durationSec = 24, glow = 0xFF8F5A2B, horizon = 0.36f,
             wind = listOf(WindKey(0f, 0f, 0.4f), WindKey(8f, 0.2f, 0.5f), WindKey(16f, -0.2f, 0.45f), WindKey(24f, 0f, 0.4f)),
             stars = listOf(
                 Star(3f, -0.3f, 0.2f), Star(4.5f, 0f, 0.6f), Star(6f, 0.3f, 0.25f), Star(8f, 0.45f, 0.75f),
