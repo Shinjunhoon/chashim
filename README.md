@@ -1,6 +1,7 @@
 # 차쉼 (Chashim)
 
-차 안에서 기다리는 시간(전기차 충전, 픽업 대기, 휴게소 휴식)을 **차의 공조·시트 열선·와이퍼·창문이 영상에 맞춰 움직이는 4D 휴식 체험**으로 바꾸는 Pleos Connect 앱입니다.
+차 안에서 기다리는 시간(전기차 충전, 픽업 대기, 휴게소 휴식)을 **차의 공조·시트 열선·와이퍼·창문이 영상에 맞춰 움직이는 4D 체험**으로 바꾸는 Pleos Connect 앱입니다.
+쉬고 싶을 땐 **힐링 모드**, 아이와 함께라면 핸들로 조종하는 **엔터테인 모드**를 고릅니다.
 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다.
 
 ## 현재 데모 범위
@@ -37,6 +38,23 @@
 
   - 판단 결과를 영상 위와 4D 패널에 보여 줍니다. 예: "차 안이 19°C로 쌀쌀해서 열선을 먼저 켜 드릴게요"
   - 에뮬레이터 실내 온도는 19.1°C로 고정이라, 더운 경우는 테스트 명령으로 확인합니다.
+
+- **엔터테인 모드 "제주 하늘 비행"** (약 2분 30초, 핸들로 조종)
+
+  | 구간 | 미션 | 4D 효과 |
+  |---|---|---|
+  | 이륙 | 핸들 감도 확인, 3-2-1 | 돌풍 +2단, 무드등 하늘 파랑 |
+  | 해안 비행 | 링 4개, 끝에 갈림길 | 창문 10%, 무드등 청록 |
+  | 폭포 (왼쪽) / 오름 능선 (오른쪽) | 링 2개 | 폭포: 와이퍼 + 돌풍 / 능선: 돌풍 3번 |
+  | 한라산 구름 위 | 먹구름 2개 피하기, 급강하 링 3개 | 창문 닫기, 돌풍 +3단, 와이퍼 |
+  | 일출 착륙 | 감상 | 시트 열선 1단계, 무드등 주황 |
+
+  - 핸들: ±60°가 화면 끝, 데드존 ±3°, 떨림 필터. 조준점이 움직이고 화면이 기울어지며 시야가 따라 움직입니다.
+  - 갈림길: 안내가 뜬 뒤 6초 안에 핸들을 45° 이상 꺾은 쪽으로 갑니다. 안 꺾으면 폭포.
+  - 브레이크: 밟는 동안 0.5배속 호버링, 바람 1단.
+  - 링 통과 +100 (콤보 3번째부터 +200), 먹구름 충돌 -100. 최고 기록을 저장합니다.
+  - 링 통과·콤보·충돌 때마다 바람이 순간적으로 세지거나 멈춥니다. 같은 장치에 300ms 안에 두 번 명령하지 않습니다.
+  - SDK의 핸들 각도는 왼쪽이 +입니다 (콘솔 오른쪽 40° → SDK -40°). 앱에서 부호를 바꿔 오른쪽을 +로 씁니다.
 
 - **안전 규칙**
   - P단에서만 시작
@@ -102,7 +120,18 @@ adb shell am start -n com.chashim.app/.MainActivity --es cmd stop    # 정지 �
 adb shell am start -n com.chashim.app/.MainActivity --ef cabin 28 --es cmd start   # 실내 28°C라고 가정하고 시작
 adb shell am start -n com.chashim.app/.MainActivity --ez cabin_reset true          # 가정 해제 (차 값 사용)
 adb shell am start -n com.chashim.app/.MainActivity --ef charge_kw 50              # 충전 속도 50kW로 가정 (0이면 해제)
+adb shell am start -n com.chashim.app/.MainActivity --es cmd fly                   # 엔터테인 비행 시작
+adb shell am start -n com.chashim.app/.MainActivity --ef steer 30                  # 핸들 오른쪽 30°로 가정 (--ez steer_reset true 로 해제)
+adb shell am start -n com.chashim.app/.MainActivity --ez brake true                # 브레이크 밟음으로 가정 (--ez brake_reset true 로 해제)
 ```
+
+시연 전 초기화 (기어 P, 배터리 77%, 바람 3단, 22°C, 창문 닫기, 무드등 흰색, 앱 재시작):
+```bash
+tools/reset_demo.sh 77
+```
+
+버추얼 콘솔에서 핸들·브레이크 조작: 콘솔의 핸들을 드래그하거나
+`curl -X PUT "http://127.0.0.1:8088/vehicle/controls?speed=0&accelerator=0&brake=0&steering=40"`
 
 충전 시뮬레이터 (버추얼 콘솔로 충전구를 열고 SoC를 실제 속도처럼 올림):
 ```bash
@@ -137,6 +166,8 @@ app/src/main/java/com/chashim/app/
 ├── engine/SessionEngine.kt  장면 재생, 시점별 효과 실행, 충전 시간 맞춤, 안전 정지, 복구
 ├── engine/ChargeEstimator.kt  충전 속도 측정, 완료 예상 시간 계산
 ├── engine/ClimateAdapt.kt   실내 온도에 따른 열선·바람 조절
+├── engine/flight/Course.kt  비행 코스 정의 (구간, 링, 먹구름, 갈림길, 구간별 4D 효과)
+├── engine/flight/FlightEngine.kt  핸들 입력, 링·먹구름 판정, 점수, 갈림길, 호버링, 이벤트 4D 반응, 안전 정지·복구
 └── ui/                      홈, 재생(영상 + 4D 효과 패널), 종료 화면
 ```
 
@@ -159,6 +190,14 @@ app/src/main/java/com/chashim/app/
   - 03: https://www.pexels.com/video/heavy-rain-falling-on-green-trees-14213651/
   - 04: https://www.pexels.com/video/raining-drops-falling-from-the-roof-6252550/
   - 05: https://www.pexels.com/video/sunlight-passing-through-trees-5535406/
+- 비행 영상 (Pexels 무료 라이선스, `app/src/main/assets/jeju_flight/`)
+  - 01 이륙: https://www.pexels.com/video/drone-flying-above-the-sea-surface-3638130/
+  - 02 해안: https://www.pexels.com/video/drone-flying-over-cliffs-and-blue-ocean-with-waves-16298299/
+  - 03a 폭포: https://www.pexels.com/video/drone-footage-of-a-waterfall-8226944/
+  - 03b 능선: https://www.pexels.com/video/drone-flying-over-the-mountain-peak-4763824/
+  - 04 구름: https://www.pexels.com/video/video-footage-of-flying-over-the-clouds-in-the-air-3129724/
+  - 05 일출: https://www.pexels.com/video/drone-video-of-a-sunrise-over-the-ocean-13326421/
+  - 실제 제주 촬영본이 아닌 무료 드론 영상입니다. 실제 제주 영상으로 바꾸려면 같은 이름으로 넣으면 됩니다.
 - 소리 (Pixabay 콘텐츠 라이선스)
   - rain_light: https://pixabay.com/sound-effects/nature-light-rain-109591/
   - rain_heavy: https://pixabay.com/sound-effects/nature-heavy-rain-thunder-145345/
