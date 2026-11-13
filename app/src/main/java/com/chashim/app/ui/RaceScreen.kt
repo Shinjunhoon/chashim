@@ -112,7 +112,7 @@ fun RaceScreen(
                             if (json.contains("\"ready\"")) ready = true
                             event(json)
                         }, "Android")
-                        loadUrl("file:///android_asset/race/index.html?debug")
+                        loadUrl("file:///android_asset/race/index.html" + (if (com.chashim.app.engine.race.RaceEngine.autopilot) "?debug&autopilot" else ""))
                         web = this
                     }
                 },

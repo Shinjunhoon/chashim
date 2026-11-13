@@ -105,7 +105,7 @@
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
   });
 
-  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a2a, 0.6); scene.add(hemi);
+  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x2a3c46, 0.6); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffffff, 1); scene.add(sun); scene.add(sun.target);
 
   // 하늘: 위아래 그러데이션 + 해 빛무리
@@ -131,17 +131,22 @@
   const nightStars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, fog: false }));
   scene.add(nightStars);
 
-  // 바다: 일렁이는 각진 물결 (정점 셰이더)
+  // 바다: 카메라를 따라다니는 촘촘한 물결 면 (세계 좌표 기준 물결이라 움직여도 미끄러지지 않는다)
   const seaUniforms = { uTime: { value: 0 } };
-  const seaMat = new THREE.MeshStandardMaterial({ color: 0x1d5a82, roughness: 0.28, metalness: 0.15, flatShading: true });
+  const seaMat = new THREE.MeshStandardMaterial({ color: 0x1b4f78, roughness: 0.62, metalness: 0.0, flatShading: true });
   seaMat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = seaUniforms.uTime;
     sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>',
       `#include <begin_vertex>
-       transformed.z += sin(position.x*0.045 + uTime*0.9)*1.1 + cos(position.y*0.06 + uTime*1.2)*0.9 + sin((position.x+position.y)*0.12 + uTime*1.7)*0.35;`);
+       vec4 wp = modelMatrix * vec4(position, 1.0);
+       transformed.z += sin(wp.x*0.06 + uTime*0.9)*0.55 + cos(wp.z*0.075 + uTime*1.15)*0.5 + sin((wp.x-wp.z)*0.15 + uTime*1.8)*0.2;`);
   };
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(3600, L * 1.5, 150, 400), seaMat);
-  sea.rotation.x = -Math.PI / 2; sea.position.set(0, 0, -L / 2); scene.add(sea);
+  const SEA_SIZE = 2600, SEA_SEG = 170, SEA_CELL = SEA_SIZE / SEA_SEG;
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEG, SEA_SEG), seaMat);
+  sea.rotation.x = -Math.PI / 2; scene.add(sea);
+  // 아주 먼 바다 (물결 없음)
+  const farSea = new THREE.Mesh(new THREE.PlaneGeometry(9000, L * 2), new THREE.MeshStandardMaterial({ color: 0x1b4f78, roughness: 0.6 }));
+  farSea.rotation.x = -Math.PI / 2; farSea.position.set(0, -0.6, -L / 2); scene.add(farSea);
 
   // ---------- 땅 (제주) ----------
   const HALLA = { p: 0.70, dx: 390, h: 400, r: 330 };
@@ -179,15 +184,9 @@
       sh += (fbm(x * 0.05, z * 0.05) - 0.5) * 10;
       h = Math.max(h, sh - 9);
     }
-    // 바다 시작 구간의 작은 바위섬
-    if (-z / L < 0.17) {
-      const gx = Math.round(x / 140) * 140, gz = Math.round(z / 160) * 160;
-      const id = gx * 0.37 + gz * 0.11;
-      if (hash(id) > 0.72 && Math.abs(gx - trackX(-gz / L)) > 45) {
-        const d = Math.hypot(x - gx, z - gz), r = 18 + hash(id + 1) * 22;
-        if (d < r) h = Math.max(h, (8 + hash(id + 2) * 14) * (1 - d / r) - 2 + fbm(x * 0.1, z * 0.1) * 4);
-      }
-    }
+    // 바람길 아래는 계곡처럼 깎아서 항상 넉넉히 떠 있게 한다
+    const tp = clamp(-z / L, 0, 1), dxT = Math.abs(x - trackX(tp)), cap = trackY(tp) - 26;
+    if (dxT < 110 && h > cap) h = lerp(h, cap, smooth(110, 45, dxT));
     return h;
   }
   const terrGeo = new THREE.PlaneGeometry(2400, L * 1.2, 140, 440);
@@ -200,7 +199,7 @@
       const x = pos.getX(i), z = pos.getZ(i), h = landH(x, z); pos.setY(i, h);
       const p = -z / L; let c;
       if (h < -1) c = cSeabed;
-      else if (h < 2.5) c = cSand;
+      else if (h < 2.5 && p > 0.15) c = cSand;
       else {
         const slope = Math.abs(landH(x + 4, z) - h) + Math.abs(landH(x, z + 4) - h);
         c = (slope > 7 ? cRock : (fbm(x * 0.02, z * 0.02) > 0.5 ? cGrass : cGrass2)).clone();
@@ -250,19 +249,24 @@
     }
   }
 
-  // 돌하르방 (바다 구간 바위섬 위)
+  // 현무암 바위섬과 돌하르방 (바다 구간)
   {
-    const basalt = new THREE.MeshStandardMaterial({ color: 0x4a4a50, flatShading: true, roughness: 1 });
-    let n = 0;
-    for (let i = 0; i < 400 && n < 5; i++) {
-      const p = 0.03 + hash(i * 1.3) * 0.13, x = trackX(p) + (hash(i * 2.9) > 0.5 ? 1 : -1) * (50 + hash(i) * 120), z = -p * L, h = landH(x, z);
-      if (h < 6) continue; n++;
-      const g = new THREE.Group(); g.position.set(x, h - 0.5, z);
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 6, 7), basalt); body.position.y = 3;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(1.8, 7, 5), basalt); head.position.y = 7.3; head.scale.y = 1.15;
-      const hat = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, 1.6, 7), basalt); hat.position.y = 9.4;
-      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.55, 5, 4), basalt); nose.position.set(0, 7.0, 1.75);
-      g.add(body, head, hat, nose); g.scale.setScalar(1.6); g.lookAt(trackX(p), h, z); scene.add(g);
+    const basalt = new THREE.MeshStandardMaterial({ color: 0x3e3e44, flatShading: true, roughness: 1 });
+    for (let i = 0; i < 16; i++) {
+      const p = 0.015 + i * 0.009, side = i % 2 ? 1 : -1;
+      const x = trackX(p) + side * (55 + hash(i * 3.7) * 170), z = -p * L - hash(i) * 30;
+      const r = 10 + hash(i * 1.9) * 16;
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), basalt);
+      rock.position.set(x, -r * 0.35, z); rock.scale.set(1.3, 0.75 + hash(i * 5.1) * 0.5, 1.1); rock.rotation.y = hash(i) * 3;
+      scene.add(rock);
+      if (i % 3 === 1) {
+        const g = new THREE.Group(); const top = r * (0.75 + hash(i * 5.1) * 0.5) * 0.62;
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 6, 7), basalt); body.position.y = 3;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(1.8, 7, 5), basalt); head.position.y = 7.3; head.scale.y = 1.15;
+        const hat = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, 1.6, 7), basalt); hat.position.y = 9.4;
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.55, 5, 4), basalt); nose.position.set(0, 7.0, 1.75);
+        g.add(body, head, hat, nose); g.scale.setScalar(1.5); g.position.set(x, top, z); g.lookAt(trackX(p), top, z); scene.add(g);
+      }
     }
   }
 
@@ -271,8 +275,8 @@
     const puffs = [];
     for (let i = 0; i < 260; i++) {
       const p = 0.6 + hash(i * 1.7) * 0.2;
-      const x = trackX(p) + (hash(i * 5.3) - 0.5) * 520, z = -p * L, y = trackY(p) - 15 + (hash(i * 8.1) - 0.5) * 50;
-      const r = 9 + hash(i * 2.2) * 16;
+      const side = hash(i * 5.3) > 0.5 ? 1 : -1, r = 9 + hash(i * 2.2) * 14;
+      const x = trackX(p) + side * (34 + r * 1.6 + hash(i * 6.7) * 240), z = -p * L, y = trackY(p) - 18 + (hash(i * 8.1) - 0.5) * 46;
       for (let k = 0; k < 5; k++) puffs.push([x + (hash(i + k) - 0.5) * r * 2.2, y + (hash(i + k * 5) - 0.3) * r * 0.6, z + (hash(i + k * 9) - 0.5) * r * 2, r * (0.6 + hash(i + k * 13) * 0.5)]);
     }
     for (let i = 0; i < 70; i++) {
@@ -280,7 +284,7 @@
       if (Math.abs(x - trackX(p)) < 60) continue;
       for (let k = 0; k < 5; k++) puffs.push([x + (hash(i + k * 3) - 0.5) * 40, y + hash(i + k) * 8, z + (hash(i + k * 7) - 0.5) * 30, 12 + hash(i + k * 11) * 10]);
     }
-    const cloudMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, emissive: 0x334455, emissiveIntensity: 0.25 }), puffs.length);
+    const cloudMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, emissive: 0xc9d6e6, emissiveIntensity: 0.45 }), puffs.length);
     const m = new THREE.Matrix4();
     puffs.forEach((c, i) => { m.makeScale(c[3], c[3] * 0.62, c[3]); m.setPosition(c[0], c[1], c[2]); cloudMesh.setMatrixAt(i, m); });
     scene.add(cloudMesh);
@@ -406,7 +410,7 @@
     const g = new THREE.BufferGeometry(), arr = new Float32Array(n * 3), vel = [];
     for (let i = 0; i < n; i++) { arr.set([pos.x, pos.y, pos.z], i * 3); vel.push(new THREE.Vector3(hash(i + bursts.length) - 0.5, hash(i * 3 + 1) - 0.3, hash(i * 7 + 2) - 0.5).normalize().multiplyScalar(10 + hash(i) * 10)); }
     g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    const pts2 = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 0.7, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const pts2 = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 1.6, map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     scene.add(pts2); bursts.push({ pts: pts2, vel, age: 0 });
   }
 
@@ -427,6 +431,7 @@
     const tipR = tipL.clone(); tipR.position.x = 3.4;
     glider.add(wing, stripe, tipL, tipR);
   }
+  glider.scale.setScalar(0.72);
   scene.add(glider);
   // 날개 끝 바람 자국
   const TRAIL = 40;
@@ -454,7 +459,7 @@
 
   // ---------- 앱과 주고받기 ----------
   window.race = {
-    input(steer, brake) { st.steer = clamp(steer, -1, 1); st.brake = !!brake; },
+    input(steer, brake) { if (AUTO) return; st.steer = clamp(steer, -1, 1); st.brake = !!brake; },
     start() { if (st.phase === 'wait') { st.phase = 'calib'; st.phaseT = 0; } },
     stop() { st.phase = 'done'; },
   };
@@ -469,7 +474,7 @@
     glider.rotateZ(clamp(bank, -0.8, 0.8));
     glider.rotateX(st.brake ? 0.18 : -0.04);
     // 카메라: 뒤에서 따라간다. 빠를수록 시야가 넓어진다
-    const camPos = p.clone().addScaledVector(t, -15).addScaledVector(UP, 5.2);
+    const camPos = p.clone().addScaledVector(t, -14).addScaledVector(UP, 4.6);
     if (st.shake > 0) camPos.add(new THREE.Vector3((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake, 0));
     camera.position.lerp(camPos, 1 - Math.pow(0.0005, dt));
     const target = p.clone().addScaledVector(t, 22).addScaledVector(UP, 1.2);
@@ -498,6 +503,7 @@
     if (inCloud > 0) scene.fog.color.lerp(new THREE.Color(0xf4f7fb), inCloud);
     nightStars.material.opacity = 1 - smooth(0.04, 0.2, p);
     sky.position.copy(camera.position); nightStars.position.copy(camera.position);
+    sea.position.set(Math.round(camera.position.x / SEA_CELL) * SEA_CELL, 0, Math.round(camera.position.z / SEA_CELL) * SEA_CELL);
     renderer.setClearColor(k.fog);
   }
 
@@ -567,7 +573,22 @@
     requestAnimationFrame(frame);
   }
 
+  // 자동 조종 (테스트용 ?autopilot): 앞의 아이템을 향해 핸들을 꺾고, 낮은 별·먹구름 앞에서는 브레이크
+  function autopilot() {
+    let tx = 0, dive = false;
+    for (const it of items) {
+      if (it.done || it.s < st.s - 2 || it.s > st.s + 70) continue;
+      if (it.type === 'storm') { dive = true; continue; }
+      tx = it.x; if (it.type === 'star' && it.y < -3) dive = true; break;
+    }
+    const drift = curvature(st.s + 10) * st.v * st.v;
+    st.steer = clamp(((tx - st.x) * 0.9 + drift) / STEER_RATE, -1, 1);
+    st.brake = dive;
+  }
+  const AUTO = Q.has('autopilot');
+
   function race(dt) {
+    if (AUTO) autopilot();
     // 옆으로: 핸들 + 굽은 길에서 바깥으로 밀리는 힘
     const drift = curvature(st.s) * st.v * st.v * 1.0;
     st.x = clamp(st.x + (st.steer * STEER_RATE - drift) * dt, -38, 38);
