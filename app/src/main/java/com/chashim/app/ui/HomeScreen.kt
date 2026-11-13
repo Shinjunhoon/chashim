@@ -41,7 +41,6 @@ fun HomeScreen(
     battery: Int?,
     charge: com.chashim.app.engine.ChargeEstimate?,
     onStart: () -> Unit,
-    course: com.chashim.app.engine.flight.Course,
     onFly: () -> Unit,
 ) {
     val parked = gear == VehicleGear.GEAR_PARK
@@ -128,11 +127,11 @@ fun HomeScreen(
                     .padding(32.dp),
             ) {
                 Text("엔터테인", color = Color(0xFF8EC9FF), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(course.title, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
-                Text(course.subtitle, color = Color.White.copy(alpha = 0.75f), fontSize = 20.sp)
+                Text("제주 하늘 레이스", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Text("새벽 바다에서 성산일출봉 해돋이까지 · 3D 레이스", color = Color.White.copy(alpha = 0.75f), fontSize = 20.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "핸들로 링을 통과하고, 브레이크로 호버링해요 · 링을 통과할 때마다 바람이 불어요",
+                    "핸들로 바람길을 따라가고, 브레이크로 내려가요 · 빨라질수록 차 바람이 세져요",
                     color = Color.White.copy(alpha = 0.6f), fontSize = 17.sp,
                 )
             }
@@ -147,7 +146,7 @@ fun HomeScreen(
                 shape = RoundedCornerShape(36.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8EC9FF), contentColor = Palette.bg),
             ) {
-                Text("비행 시작", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("레이스 시작", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

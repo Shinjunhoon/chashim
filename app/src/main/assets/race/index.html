@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>제주 하늘 레이스</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1d3a; font-family: sans-serif; }
+  canvas { display: block; }
+  .hud { position: fixed; z-index: 2; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.55); pointer-events: none; }
+  #score { top: 26px; left: 36px; font-size: 52px; font-weight: 300; letter-spacing: 1px; }
+  #sub { top: 92px; left: 38px; font-size: 18px; color: #ffd98a; }
+  #toast { top: 34px; left: 0; right: 0; text-align: center; font-size: 30px; font-weight: 600; opacity: 0; transition: opacity .5s; }
+  #zone { bottom: 34px; left: 38px; opacity: 0; transition: opacity .8s; }
+  #zone .t { font-size: 34px; font-weight: 600; }
+  #zone .c { font-size: 20px; opacity: .8; margin-top: 4px; }
+  #center { top: 0; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  #big { font-size: 150px; font-weight: 700; }
+  #msg { font-size: 30px; font-weight: 600; margin-top: 8px; }
+  #msg2 { font-size: 20px; opacity: .85; margin-top: 6px; }
+  #speed { bottom: 34px; right: 40px; text-align: right; }
+  #speed .v { font-size: 40px; font-weight: 300; }
+  #speed .u { font-size: 16px; opacity: .8; }
+  #bar { width: 180px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); margin-top: 8px; margin-left: auto; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #7fe8ff, #ffffff); border-radius: 3px; transition: width .15s; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 1;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); }
+  #flash { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: #fff; opacity: 0; transition: opacity .35s; }
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div class="hud" id="score">0</div>
+<div class="hud" id="sub"></div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="zone"><div class="t"></div><div class="c"></div></div>
+<div class="hud" id="speed"><div class="v">0</div><div class="u">바람 속도</div><div id="bar"><i></i></div></div>
+<div class="hud" id="center"><div id="big"></div><div id="msg"></div><div id="msg2"></div></div>
+<script src="three.min.js"></script>
+<script src="race.js"></script>
+</body>
+</html>
