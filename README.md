@@ -39,24 +39,33 @@
   - 판단 결과를 영상 위와 4D 패널에 보여 줍니다. 예: "차 안이 19°C로 쌀쌀해서 열선을 먼저 켜 드릴게요"
   - 에뮬레이터 실내 온도는 19.1°C로 고정이라, 더운 경우는 테스트 명령으로 확인합니다.
 
-- **엔터테인 모드 "제주 하늘 비행"** (약 2분 20초) — **바람길을 타는 4D 비행**
-  - 하늘에 빛나는 **바람길**이 구불구불 다가옵니다. 핸들(좌우)과 브레이크(밟으면 아래로, 떼면 위로)로 올라탑니다.
-  - **바람길에 가까울수록 실제 차 바람이 세집니다** (운전자 설정 + 0~3단). 차의 바람이 꾸밈이 아니라 게임의 단서입니다.
-  - 바람길 안에 머물면 점수가 쌓이고, 3초·6초 이상 머물면 순풍 ×2, ×3.
-  - **눈 대신 바람으로**: 폭포·능선 구간 가운데 10초는 바람길이 사라집니다. 바람이 세지는 쪽을 찾아갑니다.
-  - 별빛 받기 (+50, 황금 별 +150, 무드등 반짝임), 먹구름 피하기 (부딪히면 -100, 바람이 순간 멎고 화면이 흔들림), 갈림길 (핸들 45° 이상).
+- **엔터테인 모드 "제주 하늘 레이스"** (3D, 약 1분 30초) — 하늘에 떠 있는 **바람길**을 따라 나는 레이스
+  - 하나의 코스가 끊김 없이 이어지며 풍경과 시간이 바뀝니다: 새벽 바다 → 현무암 해안 → 오름과 감귤밭 → 한라산 구름 → 성산일출봉 해돋이
+  - 3D는 WebView + three.js로 그리고 (`app/src/main/assets/race`), 차 제어는 앱(`RaceEngine`)이 맡습니다.
 
-  | 구간 | 내용 | 4D 효과 |
-  |---|---|---|
-  | 이륙 | 핸들·브레이크 확인, 3-2-1 | 무드등 하늘 파랑 |
-  | 해안 비행 | 바람길 위아래로 크게 출렁, 끝에 갈림길 | 창문 10%, 무드등 청록 |
-  | 폭포 / 오름 능선 | 가운데 10초 바람길이 숨음 | 폭포: 와이퍼 |
-  | 한라산 구름 위 | 먹구름 2개, 급강하 | 창문 닫기, 와이퍼 |
-  | 일출 착륙 | 별빛 10개가 쏟아짐 | 시트 열선 1단계, 무드등 주황 |
+  | 차 입력 | 게임에서 |
+  |---|---|
+  | 핸들 | 바람길을 따라 좌우 (굽은 길에서는 바깥으로 밀림) |
+  | 브레이크 | 밟으면 아래로 (낮은 별 받기, 먹구름 밑으로 피하기) |
+  | 방향지시등 | 켜는 순간 그쪽으로 대시 |
+  | 안전벨트 | 매야 출발 |
+  | 조수석 착석 | "2인 비행" 표시 |
 
-  - 핸들: ±60°가 화면 끝, 데드존 ±3°, 떨림 필터. SDK의 핸들 각도는 왼쪽이 +라서 (콘솔 오른쪽 40° → SDK -40°) 앱에서 부호를 바꿉니다.
-  - SDK에는 가속 페달 값이 없고, 브레이크는 밟음/안 밟음만 있습니다. 그래서 높이는 "밟고 있는 시간"으로 조절합니다.
-  - 같은 장치에 300ms 안에 두 번 명령하지 않습니다. 결과 화면: 점수, 바람길에 머문 비율, 별빛, 최고 기록.
+  | 게임 장면 | 차 반응 |
+  |---|---|
+  | 속도 (바람길 위에서 빨라짐) | 바람 세기 +0~3단, 무드등 밝기 |
+  | 순풍 고리·대시·황금 별 | 바람이 순간 세게 |
+  | 별빛 | 무드등이 금빛으로 반짝 (황금 별은 독서등도) |
+  | 먹구름 근처 번개 | 실내등이 번쩍 + 천둥 소리 |
+  | 먹구름 충돌 | 바람이 순간 멎음 |
+  | 바다·해안 | 바람 얼굴 쪽, 외기, 창문 10% |
+  | 한라산 구름 속 | 와이퍼, 바람 앞유리+얼굴, 시트 통풍, 내기 |
+  | 해돋이 | 시트 열선, 핸들 열선, 바람 얼굴+발, 무드등 주황 |
+
+  - 소리(바람·별·천둥·가속·결승)는 파일 없이 앱이 직접 만듭니다 (WebAudio).
+  - 시트 위치 이동은 앉은 사람이 놀랄 수 있어 쓰지 않습니다. 에어컨 온도도 바꾸지 않습니다.
+  - 끝나거나 멈추면 바람·창문·열선·와이퍼·무드등·실내등·독서등·핸들 열선·통풍·바람 방향·외기/내기를 시작 전으로 되돌립니다.
+  - SDK의 핸들 각도는 왼쪽이 +입니다 (콘솔 오른쪽 40° → SDK -40°). 앱에서 부호를 바꿉니다.
 
 - **안전 규칙**
   - P단에서만 시작
@@ -122,7 +131,9 @@ adb shell am start -n com.chashim.app/.MainActivity --es cmd stop    # 정지 �
 adb shell am start -n com.chashim.app/.MainActivity --ef cabin 28 --es cmd start   # 실내 28°C라고 가정하고 시작
 adb shell am start -n com.chashim.app/.MainActivity --ez cabin_reset true          # 가정 해제 (차 값 사용)
 adb shell am start -n com.chashim.app/.MainActivity --ef charge_kw 50              # 충전 속도 50kW로 가정 (0이면 해제)
-adb shell am start -n com.chashim.app/.MainActivity --es cmd fly                   # 엔터테인 비행 시작
+adb shell am start -n com.chashim.app/.MainActivity --es cmd race                  # 3D 레이스 시작
+adb shell am start -n com.chashim.app/.MainActivity --ez belt true                 # 안전벨트 맴으로 가정 (에뮬레이터는 벨트를 바꿀 수 없음)
+adb shell am start -n com.chashim.app/.MainActivity --ez race_auto true --es cmd race   # 자동 조종으로 끝까지 (테스트용)
 adb shell am start -n com.chashim.app/.MainActivity --ef steer 30                  # 핸들 오른쪽 30°로 가정 (--ez steer_reset true 로 해제)
 adb shell am start -n com.chashim.app/.MainActivity --ez brake true                # 브레이크 밟음으로 가정 (--ez brake_reset true 로 해제)
 ```
@@ -168,9 +179,9 @@ app/src/main/java/com/chashim/app/
 ├── engine/SessionEngine.kt  장면 재생, 시점별 효과 실행, 충전 시간 맞춤, 안전 정지, 복구
 ├── engine/ChargeEstimator.kt  충전 속도 측정, 완료 예상 시간 계산
 ├── engine/ClimateAdapt.kt   실내 온도에 따른 열선·바람 조절
-├── engine/flight/Course.kt  비행 코스 정의 (구간, 바람길, 먹구름, 별빛, 갈림길, 구간별 4D 효과)
-├── ui/FlightCanvas.kt       바람길, 폭풍 구름·번개, 별빛, 빛 입자, 조준점·바람 세기·높이 표시
-├── engine/flight/FlightEngine.kt  핸들·브레이크 입력, 바람길 거리 → 차 바람, 판정·점수, 갈림길, 안전 정지·복구
+├── engine/race/RaceEngine.kt  3D 레이스의 차 쪽: 입력 전달, 게임 이벤트 → 4D 효과, 안전 정지·복구
+├── ui/RaceScreen.kt         WebView(3D) + 4D 패널 + 결과 화면
+assets/race/                 3D 레이스 (index.html, race.js, three.js r149)
 └── ui/                      홈, 재생(영상 + 4D 효과 패널), 종료 화면
 ```
 
@@ -193,14 +204,7 @@ app/src/main/java/com/chashim/app/
   - 03: https://www.pexels.com/video/heavy-rain-falling-on-green-trees-14213651/
   - 04: https://www.pexels.com/video/raining-drops-falling-from-the-roof-6252550/
   - 05: https://www.pexels.com/video/sunlight-passing-through-trees-5535406/
-- 비행 영상 (Pexels 무료 라이선스, `app/src/main/assets/jeju_flight/`)
-  - 01 이륙: https://www.pexels.com/video/drone-flying-above-the-sea-surface-3638130/
-  - 02 해안: https://www.pexels.com/video/drone-flying-over-cliffs-and-blue-ocean-with-waves-16298299/
-  - 03a 폭포: https://www.pexels.com/video/drone-footage-of-a-waterfall-8226944/
-  - 03b 능선: https://www.pexels.com/video/drone-flying-over-the-mountain-peak-4763824/
-  - 04 구름: https://www.pexels.com/video/video-footage-of-flying-over-the-clouds-in-the-air-3129724/
-  - 05 일출: https://www.pexels.com/video/drone-video-of-a-sunrise-over-the-ocean-13326421/
-  - 실제 제주 촬영본이 아닌 무료 드론 영상입니다. 실제 제주 영상으로 바꾸려면 같은 이름으로 넣으면 됩니다.
+- 3D 라이브러리: three.js r149 (MIT)
 - 소리 (Pixabay 콘텐츠 라이선스)
   - rain_light: https://pixabay.com/sound-effects/nature-light-rain-109591/
   - rain_heavy: https://pixabay.com/sound-effects/nature-heavy-rain-thunder-145345/
