@@ -5,7 +5,10 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.chashim.app.engine.EffectState
+import com.chashim.app.vehicle.ExtraSnapshot
 import com.chashim.app.vehicle.Snapshot
+import ai.pleos.playground.vehicle.constant.area.TurnSignalValue
+import ai.pleos.playground.vehicle.constant.control.FanDirectionType
 import com.chashim.app.vehicle.VehicleGateway
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -52,7 +55,19 @@ sealed interface RacePhase {
 }
 
 /** 화면 옆 4D 패널에 보여 줄 게임 상태 */
-data class RaceInfo(val windLevel: Int = 0, val zone: String? = null, val boost: Boolean = false)
+data class RaceInfo(
+    val windLevel: Int = 0,
+    val zone: String? = null,
+    val boost: Boolean = false,
+    val cabin: Boolean = false,
+    val reading: Boolean = false,
+    val brightness: Int? = null,
+    val direction: FanDirectionType? = null,
+    val vent: Int? = null,
+    val wheelHeat: Int? = null,
+    val recirc: Boolean? = null,
+    val passenger: Boolean = false,
+)
 
 /**
  * 엔터테인 모드 "제주 하늘 레이스".
@@ -94,9 +109,33 @@ class RaceEngine(
     }
     fun braking(): Boolean = brakeOverride ?: vehicle.brakePressed.value
 
+    /** 방향지시등: -1 왼쪽, 1 오른쪽, 0 꺼짐 */
+    fun turn(): Int = turnOverride ?: when (vehicle.turnSignal.value) {
+        TurnSignalValue.LEFT -> -1
+        TurnSignalValue.RIGHT -> 1
+        else -> 0
+    }
+
+    /** 운전석 안전벨트: 1 맴, 0 안 맴, -1 알 수 없음 (알 수 없으면 막지 않는다) */
+    fun belt(): Int = when (beltOverride ?: vehicle.driverBelt.value) {
+        true -> 1
+        false -> 0
+        null -> -1
+    }
+
+    fun passenger(): Boolean = vehicle.passenger.value == true
+
+    /** 테스트용: 방향지시등·안전벨트 가정 */
+    var turnOverride: Int? = null
+    var beltOverride: Boolean? = null
+
     private var job: Job? = null
     private var finished: CompletableDeferred<JSONObject>? = null
     private var snapshot: Snapshot? = null
+    private var extraSnap: ExtraSnapshot? = null
+    private var extrasLoaded = false
+    private var lastLightning = 0L
+    private var lastBright = 0L
     private var stopReason = "성산일출봉에 도착했어요"
     private var baseFan = 1
 
@@ -126,11 +165,13 @@ class RaceEngine(
                 _phase.value = RacePhase.Preparing
                 vehicle.refreshCapabilitiesIfMissing()
                 snapshot = vehicle.snapshot()
+                if (!extrasLoaded) { vehicle.loadExtras(); extrasLoaded = true }
+                extraSnap = vehicle.extraSnapshot()
+                _info.value = RaceInfo(passenger = vehicle.passenger.value == true)
                 baseFan = vehicle.clampFan(snapshot?.fan ?: vehicle.caps.fanMin)
                 sentFan = snapshot?.fan
                 windLevel = 0
                 burstUntil = 0L
-                _info.value = RaceInfo()
                 _effects.value = EffectState(
                     fan = snapshot?.fan, temp = snapshot?.temp, seatHeat = snapshot?.seatHeat,
                     windowPercent = snapshot?.window?.let { toPercent(it) }, ambient = snapshot?.ambientColor,
@@ -158,6 +199,7 @@ class RaceEngine(
                     effectJobs.clear()
                     _phase.value = RacePhase.Restoring
                     snapshot?.let { vehicle.restore(it) }
+                    extraSnap?.let { vehicle.restoreExtras(it) }
                     val score = result?.optInt("score") ?: 0
                     val best = prefs.getInt("best", 0)
                     val newBest = result != null && score > best
@@ -196,6 +238,14 @@ class RaceEngine(
                 windLevel = e.optInt("level").coerceIn(0, 3)
                 _info.update { it.copy(windLevel = windLevel) }
                 syncFan()
+                // 빠를수록 무드등이 밝아진다
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastBright > MIN_CMD_MS) {
+                    lastBright = now
+                    val ex = vehicle.extra
+                    val v = ex.brightMin + (ex.brightMax - ex.brightMin) * (55 + windLevel * 15) / 100
+                    effectJobs += scope.launch { vehicle.setAmbientBrightness(v)?.let { r -> _info.update { it.copy(brightness = r) } } }
+                }
             }
             "boost" -> {
                 Log.i(TAG, "race boost")
@@ -205,9 +255,25 @@ class RaceEngine(
             }
             "star" -> {
                 val big = e.optBoolean("big")
-                if (big) { pulseAmbient(0xFFFFFF, 500); burst(level = 3, ms = 800) } else pulseAmbient(STAR_GOLD, 350)
+                if (big) {
+                    pulseAmbient(0xFFFFFF, 500); burst(level = 3, ms = 800)
+                    // 황금 별: 독서등이 반짝
+                    effectJobs += scope.launch {
+                        vehicle.setReadingLight(true)?.let { _info.update { it.copy(reading = true) } }
+                        try { delay(450) } finally { withContext(NonCancellable) { vehicle.setReadingLight(false); _info.update { it.copy(reading = false) } } }
+                    }
+                } else pulseAmbient(STAR_GOLD, 350)
             }
-            "storm" -> if (e.optBoolean("hit")) burst(level = -99, ms = 1_200) // 바람이 순간 멎는다
+            "storm" -> if (e.optBoolean("hit")) {
+                burst(level = -99, ms = 1_200) // 바람이 순간 멎는다
+                blinkCabin(times = 2)
+            }
+            // 번개: 실내등이 번쩍
+            "lightning" -> {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastLightning > 1_200) { lastLightning = now; blinkCabin(times = if (e.optBoolean("near")) 2 else 1) }
+            }
+            "dash" -> burst(level = 3, ms = 500)
             "zone" -> onZone(e)
             "finish" -> {
                 Log.i(TAG, "race finish $e")
@@ -243,11 +309,41 @@ class RaceEngine(
                 }
             }
         }
+        if (e.has("dir")) {
+            val d = runCatching { FanDirectionType.valueOf(e.optString("dir")) }.getOrNull()
+            if (d != null) effectJobs += scope.launch { vehicle.setFanDirection(d)?.let { r -> _info.update { it.copy(direction = r) } } }
+        }
+        if (e.has("vent")) {
+            val lv = e.optInt("vent")
+            effectJobs += scope.launch { vehicle.setSeatVent(lv)?.let { r -> _info.update { it.copy(vent = r) } } }
+        }
+        if (e.has("wheel")) {
+            val lv = e.optInt("wheel")
+            effectJobs += scope.launch { vehicle.setWheelHeat(lv)?.let { r -> _info.update { it.copy(wheelHeat = r) } } }
+        }
+        if (e.has("recirc")) {
+            val on = e.optBoolean("recirc")
+            effectJobs += scope.launch { vehicle.setRecirc(on)?.let { r -> _info.update { it.copy(recirc = r) } } }
+        }
         if (e.has("seat")) {
             val lv = e.optInt("seat")
             effectJobs += scope.launch {
                 vehicle.setSeatHeat(lv)?.let { r -> _effects.update { it.copy(seatHeat = r, lastChanged = "seat") } }
             }
+        }
+    }
+
+    /** 실내등을 짧게 번쩍인다 (번개) */
+    private fun blinkCabin(times: Int) {
+        effectJobs += scope.launch {
+            try {
+                repeat(times) {
+                    vehicle.setCabinLight(true)?.let { _info.update { it.copy(cabin = true) } }
+                    delay(140)
+                    vehicle.setCabinLight(false); _info.update { it.copy(cabin = false) }
+                    delay(120)
+                }
+            } finally { withContext(NonCancellable) { vehicle.setCabinLight(false); _info.update { it.copy(cabin = false) } } }
         }
     }
 

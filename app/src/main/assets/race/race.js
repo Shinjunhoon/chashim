@@ -19,11 +19,11 @@
   if (Q.has('nooverlay')) ['vignette', 'flash', 'center'].forEach((id) => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
 
   const ZONES = [
-    { p: 0.00, id: 'sea',     title: '새벽 바다',        caption: '빛나는 바람길을 따라 날아요', ambient: 0x3A5BD0, name: '새벽 남색' },
-    { p: 0.17, id: 'coast',   title: '현무암 해안',      caption: '창문으로 바닷바람이 들어와요', ambient: 0x2FC4C4, name: '바다 청록', window: 10 },
+    { p: 0.00, id: 'sea',     title: '새벽 바다',        caption: '빛나는 바람길을 따라 날아요', ambient: 0x3A5BD0, name: '새벽 남색', dir: 'FACE', recirc: false },
+    { p: 0.17, id: 'coast',   title: '현무암 해안',      caption: '창문으로 바닷바람이 들어와요', ambient: 0x2FC4C4, name: '바다 청록', window: 10, recirc: false },
     { p: 0.38, id: 'oreum',   title: '오름과 감귤밭',    caption: '오름 사이로 바람길이 굽이쳐요', ambient: 0x8CCB4A, name: '오름 연두', window: 0 },
-    { p: 0.58, id: 'halla',   title: '한라산',          caption: '구름 속 먹구름은 브레이크로 아래로 피하세요', ambient: 0xC8DCFF, name: '구름 흰빛', wiper: 3 },
-    { p: 0.80, id: 'sunrise', title: '성산일출봉 해돋이', caption: '해가 떠올라요. 결승까지!', ambient: 0xFF9A3C, name: '일출 주황', seat: 1 },
+    { p: 0.58, id: 'halla',   title: '한라산',          caption: '구름 속 먹구름은 브레이크로 아래로 피하세요', ambient: 0xC8DCFF, name: '구름 흰빛', wiper: 3, dir: 'FACE_AND_DEFROST', vent: 2, recirc: true },
+    { p: 0.80, id: 'sunrise', title: '성산일출봉 해돋이', caption: '햇살이 손에 닿아요. 결승까지!', ambient: 0xFF9A3C, name: '일출 주황', seat: 1, wheel: 1, vent: 0, dir: 'FACE_AND_FLOOR' },
   ];
 
   // 시간 흐름에 따른 하늘 (새벽 → 아침 → 낮 구름 → 해돋이)
@@ -441,11 +441,56 @@
   }
   const trails = [makeTrail(), makeTrail()];
 
+  // ---------- 소리 (파일 없이 직접 만든다) ----------
+  const audio = (() => {
+    let ctx = null, windGain, windFilter, master;
+    function init() {
+      if (ctx) return;
+      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+      const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+      let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }   // 부드러운 바람 소리
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      windFilter = ctx.createBiquadFilter(); windFilter.type = 'lowpass'; windFilter.frequency.value = 400; windFilter.Q.value = 0.7;
+      windGain = ctx.createGain(); windGain.gain.value = 0;
+      src.connect(windFilter); windFilter.connect(windGain); windGain.connect(master); src.start();
+    }
+    function tone(freq, t0, dur, type, vol, to) {
+      if (!ctx) return; const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, ctx.currentTime + t0); if (to) o.frequency.exponentialRampToValueAtTime(to, ctx.currentTime + t0 + dur);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + t0); g.gain.exponentialRampToValueAtTime(vol || 0.2, ctx.currentTime + t0 + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t0 + dur); o.connect(g); g.connect(master); o.start(ctx.currentTime + t0); o.stop(ctx.currentTime + t0 + dur + 0.05);
+    }
+    function noise(dur, freq, vol, attack) {
+      if (!ctx) return; const len = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1);
+      const s = ctx.createBufferSource(); s.buffer = buf; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+      const g = ctx.createGain(); const t = ctx.currentTime; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.02)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(master); s.start();
+    }
+    return {
+      init, resume() { init(); if (ctx && ctx.state !== 'running') ctx.resume(); },
+      wind(speed01, boost) {
+        if (!ctx) return; const t = ctx.currentTime;
+        windGain.gain.setTargetAtTime(0.06 + speed01 * 0.28 + (boost ? 0.18 : 0), t, 0.25);
+        windFilter.frequency.setTargetAtTime(350 + speed01 * 1500 + (boost ? 900 : 0), t, 0.25);
+      },
+      star(big) { if (big) { [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.6, 'sine', 0.16)); } else { tone(1568, 0, 0.35, 'sine', 0.13); tone(2349, 0.05, 0.4, 'sine', 0.08); } },
+      boost() { tone(220, 0, 0.6, 'sawtooth', 0.06, 880); noise(0.7, 2500, 0.25, 0.08); },
+      thunder(near) { noise(2.2, near ? 260 : 160, near ? 0.7 : 0.35, 0.03); },
+      hit() { tone(90, 0, 0.5, 'sine', 0.4, 45); noise(0.6, 400, 0.4); },
+      beep(hi) { tone(hi ? 1320 : 880, 0, hi ? 0.5 : 0.18, 'sine', 0.18); },
+      dash() { noise(0.35, 3500, 0.3, 0.02); },
+      finish() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.12, 0.9, 'triangle', 0.14)); },
+    };
+  })();
+
   // ---------- 상태 ----------
   const st = {
     phase: 'wait', t: 0, phaseT: 0, s: 0, x: 0, y: 0, v: 0, boost: 0,
     steer: 0, brake: false, score: 0, stars: 0, onTrack: 0, flyTime: 0, streak: 0, mult: 1,
     zone: -1, windLevel: -1, shake: 0, finished: false,
+    turn: 0, lastTurn: 0, dash: 0, belt: -1, passenger: false, beepN: -1, lightningT: 0,
   };
   const $ = (id) => document.getElementById(id);
   let toastTimer = 0;
@@ -459,8 +504,11 @@
 
   // ---------- 앱과 주고받기 ----------
   window.race = {
-    input(steer, brake) { if (AUTO) return; st.steer = clamp(steer, -1, 1); st.brake = !!brake; },
-    start() { if (st.phase === 'wait') { st.phase = 'calib'; st.phaseT = 0; } },
+    input(steer, brake, turn, belt, passenger) {
+      st.turn = turn | 0; st.belt = belt === undefined ? -1 : belt; st.passenger = !!passenger;
+      if (AUTO) return; st.steer = clamp(steer, -1, 1); st.brake = !!brake;
+    },
+    start() { audio.resume(); if (st.phase === 'wait') { st.phase = 'calib'; st.phaseT = 0; } },
     stop() { st.phase = 'done'; },
   };
 
@@ -523,12 +571,19 @@
 
     if (st.phase === 'calib') {
       st.x = clamp(st.x + st.steer * STEER_RATE * dt, -HALF_W, HALF_W);
-      center('', '핸들을 돌리고, 브레이크를 밟아 보세요', '핸들은 좌우 · 브레이크는 아래로 · ' + Math.ceil(3 - st.phaseT));
-      if (st.phaseT >= 3) { st.phase = 'count'; st.phaseT = 0; }
+      if (st.belt === 0) {
+        // 안전벨트를 매야 출발한다
+        center('🔒', '안전벨트를 매 주세요', '벨트를 매면 출발 준비를 시작해요'); st.phaseT = 0;
+      } else {
+        center('', '핸들을 돌리고, 브레이크를 밟아 보세요', (st.belt === 1 ? '✓ 안전벨트 · ' : '') + '핸들은 좌우 · 브레이크는 아래로 · 깜빡이는 대시 · ' + Math.ceil(3 - st.phaseT));
+        if (st.phaseT >= 3) { st.phase = 'count'; st.phaseT = 0; }
+      }
     } else if (st.phase === 'count') {
       st.x = clamp(st.x + st.steer * STEER_RATE * dt, -HALF_W, HALF_W);
-      center(String(Math.ceil(3 - st.phaseT)), '', '');
-      if (st.phaseT >= 3) { st.phase = 'race'; st.phaseT = 0; center('', '', ''); st.v = V_MIN; toast('출발!', '#9ff0ff'); }
+      const n = Math.ceil(3 - st.phaseT);
+      center(String(n), '', '');
+      if (n !== st.beepN) { st.beepN = n; if (n > 0) audio.beep(false); }
+      if (st.phaseT >= 3) { st.phase = 'race'; st.phaseT = 0; center('', '', ''); st.v = V_MIN; toast('출발!', '#9ff0ff'); audio.beep(true); }
     } else if (st.phase === 'race') {
       race(dt);
     } else if (st.phase === 'finish') {
@@ -559,7 +614,7 @@
     placeGlider(dt);
     updateSky(st.s / L);
     $('score').textContent = Math.round(st.score);
-    $('sub').textContent = '★ ' + st.stars + (st.mult > 1 ? '   순풍 ×' + st.mult : '');
+    $('sub').textContent = '★ ' + st.stars + (st.mult > 1 ? '   순풍 ×' + st.mult : '') + (st.passenger ? '   👥 2인 비행' : '');
     $('speed').querySelector('.v').textContent = Math.round(st.v * 2.4);
     $('bar').firstChild.style.width = clamp((st.v - V_MIN) / (V_MAX + BOOST - V_MIN), 0, 1) * 100 + '%';
     renderer.render(scene, camera);
@@ -589,9 +644,16 @@
 
   function race(dt) {
     if (AUTO) autopilot();
-    // 옆으로: 핸들 + 굽은 길에서 바깥으로 밀리는 힘
+    // 방향지시등: 켜는 순간 그쪽으로 순간 대시
+    if (st.turn !== 0 && st.lastTurn === 0) {
+      st.dash = st.turn * 1; st.boost = Math.max(st.boost, 14); audio.dash();
+      toast(st.turn < 0 ? '◀ 왼쪽 대시' : '오른쪽 대시 ▶', '#9ff0ff'); send({ type: 'dash', dir: st.turn });
+    }
+    st.lastTurn = st.turn;
+    const dashV = st.dash * 26; st.dash *= Math.pow(0.02, dt);
+    // 옆으로: 핸들 + 굽은 길에서 바깥으로 밀리는 힘 + 대시
     const drift = curvature(st.s) * st.v * st.v * 1.0;
-    st.x = clamp(st.x + (st.steer * STEER_RATE - drift) * dt, -38, 38);
+    st.x = clamp(st.x + (st.steer * STEER_RATE - drift + dashV) * dt, -38, 38);
     const onTrack = Math.abs(st.x) <= HALF_W && st.y > -7;
     // 속도: 바람길 안이면 빨라지고, 밖이면 느려진다. 순풍 고리는 잠깐 가속
     const target = (onTrack ? V_MAX : V_MIN) + st.boost;
@@ -607,6 +669,15 @@
       st.mult = m; st.score += 30 * st.mult * dt;
     } else { st.streak = 0; st.mult = 1; }
 
+    audio.wind(clamp((st.v - V_MIN) / (V_MAX + BOOST - V_MIN), 0, 1), st.boost > 5);
+    // 먹구름 근처의 번개: 천둥 소리 + 실내등 번쩍
+    for (const it of items) {
+      if (it.type !== 'storm' || it.done) continue;
+      const d = it.s - st.s;
+      if (d > 0 && d < 260 && it.bolt.visible && st.t - st.lightningT > 1.6) {
+        st.lightningT = st.t; audio.thunder(d < 120); flash(d < 120 ? 0.35 : 0.18); send({ type: 'lightning', near: d < 120 });
+      }
+    }
     // 차 바람 세기 = 속도 (0~3단)
     const level = clamp(Math.round((st.v - V_MIN) / (V_MAX - V_MIN) * 3), 0, 3);
     if (level !== st.windLevel) { st.windLevel = level; send({ type: 'wind', level }); }
@@ -626,20 +697,20 @@
         it.done = true; it.obj.visible = false; st.stars++; st.score += it.big ? 150 : 50;
         burst(it.obj.position, it.big ? 0xffffff : 0xffd45a, it.big ? 40 : 18);
         if (it.big) { toast('황금 별 +150', '#ffe6a0'); flash(0.35); }
-        send({ type: 'star', big: it.big });
+        audio.star(it.big); send({ type: 'star', big: it.big });
       } else if (it.type === 'ring' && st.s >= it.s) {
         it.done = true;
-        if (Math.hypot(dx, dy) < 5.6) { st.boost = BOOST; st.score += 100; toast('순풍 가속!', '#9ff0ff'); burst(it.obj.position, 0x9ff0ff, 26); send({ type: 'boost' }); }
+        if (Math.hypot(dx, dy) < 5.6) { st.boost = BOOST; st.score += 100; toast('순풍 가속!', '#9ff0ff'); burst(it.obj.position, 0x9ff0ff, 26); audio.boost(); send({ type: 'boost' }); }
       } else if (it.type === 'storm' && st.s >= it.s) {
         it.done = true;
         if (Math.abs(dx) < 8 && st.y > -6) {
           st.score = Math.max(0, st.score - 100); st.v *= 0.55; st.boost = 0; st.streak = 0; st.mult = 1; st.shake = 2.2;
-          toast('먹구름에 부딪혔어요 -100', '#ff8a80'); flash(0.25); send({ type: 'storm', hit: true });
+          toast('먹구름에 부딪혔어요 -100', '#ff8a80'); flash(0.25); audio.hit(); send({ type: 'storm', hit: true });
         } else { toast('먹구름을 피했어요', '#ffffff'); send({ type: 'storm', hit: false }); }
       }
     }
 
-    if (st.s >= L * 0.985) { st.phase = 'finish'; st.phaseT = 0; toast('도착!', '#ffe6a0'); center('', '성산일출봉 도착', '점수 ' + Math.round(st.score)); }
+    if (st.s >= L * 0.985) { st.phase = 'finish'; st.phaseT = 0; toast('도착!', '#ffe6a0'); audio.finish(); center('', '성산일출봉 도착', '점수 ' + Math.round(st.score)); }
   }
 
   // 시작 화면: 첫 장면을 미리 그려 둔다
