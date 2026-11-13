@@ -282,7 +282,7 @@ class FlightEngine(
                         // 숨은 바람길 구간 안내
                         val hidden = s.isHidden(t)
                         if (hidden != wasHidden) {
-                            toast(if (hidden) "바람길이 사라졌어요 · 바람이 세지는 쪽을 찾아보세요" else "바람길이 다시 보여요", true)
+                            if (!hidden) toast("바람길이 다시 보여요", true) // 숨을 때는 화면 위 안내가 따로 뜬다
                             wasHidden = hidden
                         }
 
