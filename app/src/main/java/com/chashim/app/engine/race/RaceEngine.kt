@@ -51,6 +51,7 @@ sealed interface RacePhase {
         val newBest: Boolean,
         val reason: String,
         val finished: Boolean,
+        val character: String? = null,
     ) : RacePhase
 }
 
@@ -67,6 +68,7 @@ data class RaceInfo(
     val wheelHeat: Int? = null,
     val recirc: Boolean? = null,
     val passenger: Boolean = false,
+    val character: String? = null,
 )
 
 /**
@@ -214,6 +216,7 @@ class RaceEngine(
                         newBest = newBest,
                         reason = stopReason,
                         finished = result != null,
+                        character = result?.optString("character")?.takeIf { it.isNotBlank() } ?: _info.value.character,
                     )
                 }
             }
@@ -275,6 +278,20 @@ class RaceEngine(
             }
             "dash" -> burst(level = 3, ms = 500)
             "zone" -> onZone(e)
+            // 캐릭터를 고르면 차 무드등이 그 캐릭터 색으로
+            "character" -> {
+                val color = e.optInt("ambient", -1)
+                val name = e.optString("name")
+                _info.update { it.copy(character = name) }
+                if (color >= 0) {
+                    sceneAmbient = color
+                    val light = e.optString("light")
+                    effectJobs += scope.launch {
+                        vehicle.setAmbientColor(color)?.let { r -> _effects.update { it.copy(ambient = r, ambientName = "$name · $light", lastChanged = "ambient") } }
+                    }
+                }
+                if (e.optBoolean("confirm")) { Log.i(TAG, "race character $name"); burst(level = 2, ms = 700) }
+            }
             "finish" -> {
                 Log.i(TAG, "race finish $e")
                 finished?.complete(e)

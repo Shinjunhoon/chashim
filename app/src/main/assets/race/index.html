@@ -25,6 +25,20 @@
   #bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #7fe8ff, #ffffff); border-radius: 3px; transition: width .15s; }
   #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 1;
     background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); }
+  #select { position: fixed; left: 0; right: 0; bottom: 0; top: 0; z-index: 4; display: none; flex-direction: column; justify-content: space-between; pointer-events: none; }
+  #select .head { text-align: center; margin-top: 30px; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.6); }
+  #select .head .t { font-size: 34px; font-weight: 700; }
+  #select .head .h { font-size: 18px; opacity: .85; margin-top: 6px; }
+  #cards { display: flex; gap: 14px; justify-content: center; margin: 0 24px 26px; pointer-events: auto; }
+  .card { width: 210px; padding: 14px 16px; border-radius: 18px; background: rgba(10,20,40,.62); border: 2px solid rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(6px); transition: transform .2s, border-color .2s, background .2s; }
+  .card.on { transform: translateY(-10px); border-color: var(--c); background: rgba(10,20,40,.82); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+  .card .n { font-size: 22px; font-weight: 700; }
+  .card .d { font-size: 14px; opacity: .8; margin: 4px 0 10px; min-height: 36px; }
+  .card .r { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: .85; margin-top: 4px; }
+  .card .r span { width: 44px; }
+  .card .r b { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+  .card .r b i { display: block; height: 100%; background: var(--c); border-radius: 3px; }
+  .card .best { font-size: 12px; opacity: .7; margin-top: 8px; }
   #flash { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: #fff; opacity: 0; transition: opacity .35s; }
 </style>
 </head>
@@ -36,6 +50,7 @@
 <div class="hud" id="toast"></div>
 <div class="hud" id="zone"><div class="t"></div><div class="c"></div></div>
 <div class="hud" id="speed"><div class="v">0</div><div class="u">바람 속도</div><div id="bar"><i></i></div></div>
+<div id="select"><div class="head"><div class="t">누구와 함께 날까요?</div><div class="h">핸들로 넘기고, 브레이크를 밟으면 출발 준비 · 화면을 눌러도 돼요</div></div><div id="cards"></div></div>
 <div class="hud" id="center"><div id="big"></div><div id="msg"></div><div id="msg2"></div></div>
 <script src="three.min.js"></script>
 <script src="race.js"></script>
