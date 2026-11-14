@@ -101,6 +101,7 @@ fun RaceScreen(
                     WebView(ctx).apply {
                         settings.javaScriptEnabled = true
                         settings.allowFileAccess = true
+                        settings.domStorageEnabled = true // 캐릭터별 최고 기록
                         settings.mediaPlaybackRequiresUserGesture = false
                         setBackgroundColor(android.graphics.Color.BLACK)
                         // 에뮬레이터에서 WebGL 화면이 합성되지 않는 문제를 피하려고 하드웨어 레이어로 그린다
@@ -137,7 +138,7 @@ fun RaceScreen(
         ) {
             Text("4D 효과 · 엔터테인", color = Palette.muted, fontSize = 17.sp)
             Text("제주 하늘 레이스", color = Palette.text, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text(info.zone ?: "출발 준비", color = Palette.accent, fontSize = 17.sp)
+            Text(listOfNotNull(info.character, info.zone ?: "캐릭터 고르는 중").joinToString(" · "), color = Palette.accent, fontSize = 17.sp)
             SpeedWindCard(info.windLevel, info.boost)
             MiniRow("🌬️ 바람", effects.fan?.let { "${it}단" }, effects.gust, "🧭 방향", info.direction?.let { dirLabel(it) }, false)
             MiniRow("🪟 창문", effects.windowPercent?.let { if (it == 0) "닫힘" else "$it%" }, effects.lastChanged == "window", "🔄 공기", info.recirc?.let { if (it) "내기" else "외기" }, false)
@@ -222,7 +223,7 @@ fun RaceResultScreen(result: RacePhase.Result, onHome: () -> Unit, onAgain: () -
     ) {
         Text(if (result.finished) "결승 도착!" else "레이스 종료", color = Palette.text, fontSize = 44.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(result.reason, color = Palette.muted, fontSize = 22.sp)
+        Text(listOfNotNull(result.character?.let { "$it 와 함께" }, result.reason).joinToString(" · "), color = Palette.muted, fontSize = 22.sp)
         Spacer(Modifier.height(28.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             ResultStat("점수", "${result.score}", if (result.newBest) "최고 기록!" else "최고 ${result.best}")

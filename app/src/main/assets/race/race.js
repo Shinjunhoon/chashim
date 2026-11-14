@@ -414,23 +414,87 @@
     scene.add(pts2); bursts.push({ pts: pts2, vel, age: 0 });
   }
 
-  // ---------- 비행체 ----------
-  const glider = new THREE.Group();
-  {
-    const wingGeo = new THREE.BufferGeometry();
-    wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([
-      0, 0, -2.6, -3.4, 0, 1.2, 0, 0.25, 0.6,
-      0, 0, -2.6, 0, 0.25, 0.6, 3.4, 0, 1.2,
-      0, 0, -2.6, 0, -0.15, 0.7, -3.4, 0, 1.2,
-      0, 0, -2.6, 3.4, 0, 1.2, 0, -0.15, 0.7,
-    ], 3));
-    wingGeo.computeVertexNormals();
-    const wing = new THREE.Mesh(wingGeo, new THREE.MeshStandardMaterial({ color: 0xf6f8fb, flatShading: true, side: THREE.DoubleSide, roughness: 0.5 }));
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 2.4), new THREE.MeshBasicMaterial({ color: 0x7fe8ff })); stripe.position.set(0, 0.28, -0.4);
-    const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), new THREE.MeshBasicMaterial({ color: 0x9ff0ff })); tipL.position.set(-3.4, 0, 1.2);
-    const tipR = tipL.clone(); tipR.position.x = 3.4;
-    glider.add(wing, stripe, tipL, tipR);
+  // ---------- 캐릭터 (제주의 하늘 친구들) ----------
+  const flat = (c, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, flatShading: true, roughness: 0.7 }, extra || {}));
+  function tri(pts) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g.computeVertexNormals(); return g; }
+  const deltaWing = () => tri([
+    0, 0, -2.6, -3.4, 0, 1.2, 0, 0.25, 0.6,   0, 0, -2.6, 0, 0.25, 0.6, 3.4, 0, 1.2,
+    0, 0, -2.6, 0, -0.15, 0.7, -3.4, 0, 1.2,  0, 0, -2.6, 3.4, 0, 1.2, 0, -0.15, 0.7,
+  ]);
+  function makeSeagull() {
+    const g = new THREE.Group(), white = flat(0xf7f8fa), grey = flat(0x9aa4ad), dark = flat(0x2c3138), beak = flat(0xffb02e);
+    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), white); body.scale.set(0.75, 0.7, 2.0); g.add(body);
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), white); head.position.set(0, 0.45, -1.75); g.add(head);
+    const bk = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.75, 6), beak); bk.rotation.x = -Math.PI / 2; bk.position.set(0, 0.35, -2.55); g.add(bk);
+    for (const sx of [-0.28, 0.28]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), dark); e.position.set(sx, 0.62, -2.1); g.add(e); }
+    const tail = new THREE.Mesh(tri([0, 0, 1.6, -0.7, 0, 2.6, 0.7, 0, 2.6]), grey); g.add(tail);
+    const wings = [];
+    for (const sd of [-1, 1]) {
+      const pivot = new THREE.Group(); pivot.position.set(sd * 0.55, 0.15, -0.3);
+      const inner = new THREE.Mesh(tri([0, 0, -0.7, sd * 2.0, 0.1, -0.2, 0, 0, 0.8,  0, 0, 0.8, sd * 2.0, 0.1, -0.2, sd * 2.0, 0.05, 0.6]), white);
+      const outer = new THREE.Mesh(tri([sd * 2.0, 0.1, -0.2, sd * 3.6, 0.0, 0.6, sd * 2.0, 0.05, 0.6]), grey);
+      const tipm = new THREE.Mesh(tri([sd * 3.0, 0.03, 0.3, sd * 3.6, 0.0, 0.6, sd * 3.2, 0.02, 0.62]), dark);
+      pivot.add(inner, outer, tipm); g.add(pivot); wings.push({ pivot, sd });
+    }
+    g.userData.flap = wings; g.userData.tips = [[-3.4, 0, 0.6], [3.4, 0, 0.6]];
+    return g;
   }
+  function makeTangerine() {
+    const g = new THREE.Group(), orange = flat(0xff8a1e, { emissive: 0x3a1600 }), leaf = flat(0x3f8a3a), white = flat(0xf2f4f6), dark = flat(0x2c3138);
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 1), orange); ball.scale.set(1.05, 0.92, 1.25); g.add(ball);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.4, 5), leaf); stem.position.set(0, 1.55, -0.1); g.add(stem);
+    const lf = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 4), leaf); lf.scale.z = 0.25; lf.rotation.z = -1.0; lf.position.set(0.45, 1.65, -0.1); g.add(lf);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.2), white); cab.position.set(0, -1.75, 0); g.add(cab);
+    for (const sx of [-0.45, 0.45]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 4), dark); r.position.set(sx, -1.35, 0); g.add(r); }
+    for (const sx of [-0.35, 0.35]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.13, 6, 4), dark); e.position.set(sx, 0.25, -1.88); g.add(e); }
+    const fins = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0]];
+    for (const f of fins) { const m = new THREE.Mesh(tri([0, 0, 1.6, f[0] * 0.9 + f[1] * 0, f[1] * 0.9, 2.3, 0, 0, 2.4]), orange); g.add(m); }
+    const prop = new THREE.Group(); prop.position.set(0, 0, 2.45); g.add(prop);
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.1, 0.05), white); b.position.y = 0.55; const a = new THREE.Group(); a.rotation.z = k * 2.094; a.add(b); prop.add(a); }
+    g.userData.prop = prop; g.userData.tips = [[-1.7, 0, 0.5], [1.7, 0, 0.5]];
+    return g;
+  }
+  function makeHareubang() {
+    const g = new THREE.Group(), basalt = flat(0x55545c, { roughness: 1 }), sail = flat(0x2fb7c9, { side: THREE.DoubleSide }), sail2 = flat(0xff9a3c, { side: THREE.DoubleSide }), bar = flat(0x222428);
+    const w = new THREE.Mesh(deltaWing(), sail); w.position.y = 2.0; w.scale.set(1.05, 1, 1); g.add(w);
+    const stripe = new THREE.Mesh(tri([0, 0.27, -2.4, -1.2, 0.08, 0.5, 1.2, 0.08, 0.5]), sail2); stripe.position.y = 2.01; g.add(stripe);
+    for (const sx of [-0.5, 0.5]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.7, 4), bar); r.position.set(sx, 1.1, -0.2); r.rotation.z = sx * 0.25; g.add(r); }
+    const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 4), bar); bt.rotation.z = Math.PI / 2; bt.position.set(0, 0.3, -0.4); g.add(bt);
+    const man = new THREE.Group(); man.position.set(0, -0.6, 0.2); man.rotation.x = -1.2;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 1.8, 7), basalt); man.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.6, 7, 5), basalt); head.position.y = 1.3; head.scale.y = 1.15; man.add(head);
+    const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 0.5, 7), basalt); hat.position.y = 1.95; man.add(hat);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.2, 5, 4), basalt); nose.position.set(0, 1.25, 0.58); man.add(nose);
+    for (const sx of [-0.22, 0.22]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.11, 5, 4), flat(0x2a2a30)); e.position.set(sx, 1.45, 0.52); man.add(e); }
+    g.add(man);
+    g.userData.tips = [[-3.5, 2.0, 1.2], [3.5, 2.0, 1.2]];
+    return g;
+  }
+  function makePaperPlane() {
+    const g = new THREE.Group(), paper = flat(0xfbfbf8, { side: THREE.DoubleSide, roughness: 0.9 }), crease = flat(0xd9dde3, { side: THREE.DoubleSide });
+    g.add(new THREE.Mesh(tri([0, 0, -3.2, -2.8, 0.15, 1.6, 0, -0.05, 1.6]), paper));
+    g.add(new THREE.Mesh(tri([0, 0, -3.2, 0, -0.05, 1.6, 2.8, 0.15, 1.6]), paper));
+    g.add(new THREE.Mesh(tri([0, 0, -3.2, 0, -0.05, 1.6, 0, -0.9, 1.4]), crease));
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 4.6), flat(0x7fe8ff)); line.position.set(-1.0, 0.07, 0.0); line.rotation.y = 0.36; g.add(line);
+    const line2 = line.clone(); line2.position.x = 1.0; line2.rotation.y = -0.36; g.add(line2);
+    g.userData.tips = [[-2.8, 0.15, 1.6], [2.8, 0.15, 1.6]];
+    return g;
+  }
+  const CHARS = [
+    { id: 'gull',  name: '바당이',   who: '제주 갈매기',          desc: '핸들이 민첩해요',             color: '#7fd0ff', ambient: 0x6EC8FF, light: '하늘색', stats: [3, 5, 2], make: makeSeagull,    vmax: 1.0,  steer: 1.35, magnet: 1.0, guard: 1.0 },
+    { id: 'tang',  name: '귤돌이',   who: '감귤 비행선',          desc: '별빛을 끌어당겨요',           color: '#ff9a3c', ambient: 0xFF8A1E, light: '주황',   stats: [3, 3, 3], make: makeTangerine,  vmax: 0.97, steer: 1.0,  magnet: 2.0, guard: 1.0 },
+    { id: 'harb',  name: '하르방',   who: '돌하르방 행글라이더',  desc: '묵직해서 먹구름에 덜 느려져요', color: '#a89ad8', ambient: 0x7A6FB5, light: '현무암 보라', stats: [3, 2, 5], make: makeHareubang, vmax: 0.98, steer: 0.85, magnet: 1.0, guard: 2.0 },
+    { id: 'paper', name: '종이비행기', who: '접은 종이비행기',      desc: '최고 속도가 빨라요',           color: '#ffffff', ambient: 0xFFFFFF, light: '흰색',   stats: [5, 3, 1], make: makePaperPlane, vmax: 1.12, steer: 1.0,  magnet: 1.0, guard: 0.7 },
+  ];
+  let char = CHARS[0];
+  const glider = new THREE.Group();
+  let model = null;
+  function setCharacter(c) {
+    char = c;
+    if (model) glider.remove(model);
+    model = c.make(); glider.add(model);
+  }
+  setCharacter(CHARS[0]);
   glider.scale.setScalar(0.72);
   scene.add(glider);
   // 날개 끝 바람 자국
@@ -508,9 +572,41 @@
       st.turn = turn | 0; st.belt = belt === undefined ? -1 : belt; st.passenger = !!passenger;
       if (AUTO) return; st.steer = clamp(steer, -1, 1); st.brake = !!brake;
     },
-    start() { audio.resume(); if (st.phase === 'wait') { st.phase = 'calib'; st.phaseT = 0; } },
+    start() { audio.resume(); if (st.phase === 'wait') { st.phase = 'select'; st.phaseT = 0; showSelect(true); } },
+    pick(i) { if (st.phase === 'select') { selIndex = i; renderCards(); confirmPick(); } },
     stop() { st.phase = 'done'; },
   };
+
+  // ---------- 캐릭터 고르기 ----------
+  let selIndex = 0, lastSteerDir = 0, lastBrake = false;
+  function best(id) { try { return +(localStorage.getItem('best_' + id) || 0); } catch (e) { return 0; } }
+  function renderCards() {
+    const el = $('cards'); el.innerHTML = '';
+    CHARS.forEach((c, i) => {
+      const d = document.createElement('div'); d.className = 'card' + (i === selIndex ? ' on' : ''); d.style.setProperty('--c', c.color);
+      const bar = (label, v) => `<div class="r"><span>${label}</span><b><i style="width:${v * 20}%"></i></b></div>`;
+      d.innerHTML = `<div class="n">${c.name}</div><div class="d">${c.who} · ${c.desc}</div>` + bar('속도', c.stats[0]) + bar('핸들링', c.stats[1]) + bar('버티기', c.stats[2]) +
+        `<div class="best">무드등 ${c.light}${best(c.id) ? ' · 최고 ' + best(c.id) : ''}</div>`;
+      d.onclick = () => { if (selIndex === i) confirmPick(); else { selIndex = i; renderCards(); previewPick(); } };
+      el.appendChild(d);
+    });
+  }
+  function previewPick() { setCharacter(CHARS[selIndex]); audio.beep(false); send({ type: 'character', id: char.id, name: char.name, ambient: char.ambient, light: char.light, confirm: false }); }
+  function confirmPick() {
+    setCharacter(CHARS[selIndex]); showSelect(false); audio.star(true);
+    send({ type: 'character', id: char.id, name: char.name, ambient: char.ambient, light: char.light, confirm: true });
+    toast(char.name + '와 함께 출발 준비!', char.color); st.phase = 'calib'; st.phaseT = 0;
+  }
+  function showSelect(on) { $('select').style.display = on ? 'flex' : 'none'; if (on) { renderCards(); previewPick(); center('', '', ''); } }
+  function selectStep() {
+    // 핸들을 크게 돌리면 옆 캐릭터로, 브레이크를 밟으면 결정
+    const dir = st.steer > 0.5 ? 1 : st.steer < -0.5 ? -1 : 0;
+    if (dir !== 0 && dir !== lastSteerDir) { selIndex = (selIndex + dir + CHARS.length) % CHARS.length; renderCards(); previewPick(); }
+    lastSteerDir = dir;
+    if (st.brake && !lastBrake && st.phaseT > 0.6) confirmPick();
+    lastBrake = st.brake;
+    if (AUTO && st.phaseT > 1.2) confirmPick();
+  }
 
   function placeGlider(dt) {
     const c = sample(pts, st.s), t = sample(tans, st.s), sd = sample(sides, st.s);
@@ -522,15 +618,16 @@
     glider.rotateZ(clamp(bank, -0.8, 0.8));
     glider.rotateX(st.brake ? 0.18 : -0.04);
     // 카메라: 뒤에서 따라간다. 빠를수록 시야가 넓어진다
-    const camPos = p.clone().addScaledVector(t, -14).addScaledVector(UP, 4.6);
+    let camPos = p.clone().addScaledVector(t, -14).addScaledVector(UP, 4.6);
+    if (st.phase === 'select') { const a = st.t * 0.5; camPos = p.clone().add(new THREE.Vector3(Math.sin(a) * 9, 2.2, Math.cos(a) * 9 - 2)); }
     if (st.shake > 0) camPos.add(new THREE.Vector3((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake, 0));
-    camera.position.lerp(camPos, 1 - Math.pow(0.0005, dt));
-    const target = p.clone().addScaledVector(t, 22).addScaledVector(UP, 1.2);
+    camera.position.lerp(camPos, st.phase === 'select' ? 1 : 1 - Math.pow(0.0005, dt));
+    const target = st.phase === 'select' ? p.clone().addScaledVector(UP, -0.6) : p.clone().addScaledVector(t, 22).addScaledVector(UP, 1.2);
     camera.lookAt(target);
     camera.fov = lerp(camera.fov, 62 + clamp((st.v - V_MIN) / (V_MAX + BOOST - V_MIN), 0, 1) * 16, 0.08); camera.updateProjectionMatrix();
     // 날개 끝 자국
-    [-3.4, 3.4].forEach((wx, k) => {
-      const tip = new THREE.Vector3(wx, 0, 1.2).applyMatrix4(glider.matrixWorld);
+    (model.userData.tips || [[-3.4, 0, 1.2], [3.4, 0, 1.2]]).forEach((tp, k) => {
+      const tip = new THREE.Vector3(tp[0], tp[1], tp[2]).applyMatrix4(glider.matrixWorld);
       const tr = trails[k]; tr.pts.unshift(tip); if (tr.pts.length > TRAIL) tr.pts.pop();
       const a = tr.line.geometry.attributes.position; for (let i = 0; i < TRAIL; i++) { const q = tr.pts[Math.min(i, tr.pts.length - 1)]; a.setXYZ(i, q.x, q.y, q.z); }
       a.needsUpdate = true;
@@ -565,11 +662,15 @@
     st.t += dt; st.phaseT += dt;
     seaUniforms.uTime.value = st.t; ribbonMat.uniforms.uTime.value = st.t;
     blades.forEach((b, i) => { b.rotation.z += dt * (1.2 + i * 0.07); });
+    if (model.userData.flap) model.userData.flap.forEach((w) => { w.pivot.rotation.z = w.sd * (Math.sin(st.t * (st.phase === 'race' ? 7 : 4)) * 0.45); });
+    if (model.userData.prop) model.userData.prop.rotation.z += dt * 18;
 
     // 높이: 브레이크를 밟으면 내려가고, 떼면 올라온다
     st.y = st.brake ? Math.max(DIVE, st.y - 20 * dt) : Math.min(0, st.y + 14 * dt);
 
-    if (st.phase === 'calib') {
+    if (st.phase === 'select') {
+      selectStep();
+    } else if (st.phase === 'calib') {
       st.x = clamp(st.x + st.steer * STEER_RATE * dt, -HALF_W, HALF_W);
       if (st.belt === 0) {
         // 안전벨트를 매야 출발한다
@@ -590,7 +691,8 @@
       st.v = lerp(st.v, 12, 0.03); st.s = Math.min(L, st.s + st.v * dt);
       if (st.phaseT > 2.2 && !st.finished) {
         st.finished = true;
-        send({ type: 'finish', score: Math.round(st.score), stars: st.stars, starsTotal: starDefs.length, onTrackPct: Math.round(st.onTrack / Math.max(1, st.flyTime) * 100), timeSec: Math.round(st.flyTime) });
+        try { const sc = Math.round(st.score); if (sc > best(char.id)) localStorage.setItem('best_' + char.id, sc); } catch (e) {}
+        send({ type: 'finish', character: char.name, score: Math.round(st.score), stars: st.stars, starsTotal: starDefs.length, onTrackPct: Math.round(st.onTrack / Math.max(1, st.flyTime) * 100), timeSec: Math.round(st.flyTime) });
       }
     }
 
@@ -598,7 +700,12 @@
     for (const it of items) {
       if (it.done) continue;
       const d = Math.abs(it.s - st.s); if (d > 700) { it.obj.visible = false; continue; } it.obj.visible = true;
-      if (it.type === 'star') { it.core.rotation.y += dt * 2.2; it.obj.position.y += Math.sin(st.t * 3 + it.s) * 0.004; }
+      if (it.type === 'star') {
+        it.core.rotation.y += dt * 2.2; it.obj.position.y += Math.sin(st.t * 3 + it.s) * 0.004;
+        if (char.magnet > 1 && st.phase === 'race' && it.s - st.s < 60 && it.s - st.s > -3) {   // 자석: 별이 귤돌이 쪽으로 끌려온다
+          it.obj.position.lerp(glider.position, 0.035); it.x = lerp(it.x, st.x, 0.035); it.y = lerp(it.y, st.y, 0.035);
+        }
+      }
       if (it.type === 'ring') it.ring.rotation.z += dt * 0.8;
       if (it.type === 'storm') it.bolt.visible = Math.sin(st.t * 7.3 + it.s) > 0.93;
     }
@@ -653,10 +760,10 @@
     const dashV = st.dash * 26; st.dash *= Math.pow(0.02, dt);
     // 옆으로: 핸들 + 굽은 길에서 바깥으로 밀리는 힘 + 대시
     const drift = curvature(st.s) * st.v * st.v * 1.0;
-    st.x = clamp(st.x + (st.steer * STEER_RATE - drift + dashV) * dt, -38, 38);
+    st.x = clamp(st.x + (st.steer * STEER_RATE * char.steer - drift + dashV) * dt, -38, 38);
     const onTrack = Math.abs(st.x) <= HALF_W && st.y > -7;
     // 속도: 바람길 안이면 빨라지고, 밖이면 느려진다. 순풍 고리는 잠깐 가속
-    const target = (onTrack ? V_MAX : V_MIN) + st.boost;
+    const target = (onTrack ? V_MAX * char.vmax : V_MIN) + st.boost;
     st.v = lerp(st.v, target, 1 - Math.pow(onTrack ? 0.55 : 0.25, dt));
     st.boost = Math.max(0, st.boost - dt * 22);
     st.s += st.v * dt;
@@ -693,7 +800,7 @@
       if (it.done || st.s < it.s - 3) continue;
       if (st.s > it.s + 4) { if (it.type !== 'star') it.done = true; else if (st.s > it.s + 40) it.done = true; continue; }
       const dx = st.x - it.x, dy = st.y - it.y;
-      if (it.type === 'star' && Math.hypot(dx, dy) < (it.big ? 4.2 : 3.4)) {
+      if (it.type === 'star' && Math.hypot(dx, dy) < (it.big ? 4.2 : 3.4) * char.magnet) {
         it.done = true; it.obj.visible = false; st.stars++; st.score += it.big ? 150 : 50;
         burst(it.obj.position, it.big ? 0xffffff : 0xffd45a, it.big ? 40 : 18);
         if (it.big) { toast('황금 별 +150', '#ffe6a0'); flash(0.35); }
@@ -704,8 +811,8 @@
       } else if (it.type === 'storm' && st.s >= it.s) {
         it.done = true;
         if (Math.abs(dx) < 8 && st.y > -6) {
-          st.score = Math.max(0, st.score - 100); st.v *= 0.55; st.boost = 0; st.streak = 0; st.mult = 1; st.shake = 2.2;
-          toast('먹구름에 부딪혔어요 -100', '#ff8a80'); flash(0.25); audio.hit(); send({ type: 'storm', hit: true });
+          const pen = Math.round(100 / char.guard); st.score = Math.max(0, st.score - pen); st.v *= char.guard > 1 ? 0.82 : 0.55; st.boost = 0; st.streak = 0; st.mult = 1; st.shake = 2.2 / char.guard;
+          toast((char.guard > 1 ? '하르방은 끄떡없어요 -' : '먹구름에 부딪혔어요 -') + pen, '#ff8a80'); flash(0.25); audio.hit(); send({ type: 'storm', hit: true });
         } else { toast('먹구름을 피했어요', '#ffffff'); send({ type: 'storm', hit: false }); }
       }
     }
