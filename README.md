@@ -4,6 +4,35 @@
 쉬고 싶을 땐 **힐링 모드**, 아이와 함께라면 핸들로 조종하는 **엔터테인 모드**를 고릅니다.
 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다.
 
+▶ **시연 영상 (3분):** [Chashim_demo.mp4](https://github.com/Shinjunhoon/chashim/releases/download/v1.0.0/Chashim_demo.mp4)
+
+## 화면
+
+### 앱이 차를 움직이는 모습
+위는 앱 화면, 아래는 버추얼 콘솔(차 상태)입니다. 폭우 장면에서 시트 열선(DRIVER H1), 무드등 색, 바람 세기가 앱에 맞춰 바뀝니다.
+
+<img src="docs/images/00_4d_with_console.jpg" width="520" alt="앱 화면과 버추얼 콘솔">
+
+### 힐링 모드 "비 오는 숲" — 충전 시간에 맞춰 쉬기
+
+| 충전 시작 안내 | 안개 낀 숲 | 폭우 |
+|---|---|---|
+| <img src="docs/images/01_charge_prompt.jpg" width="280"> | <img src="docs/images/02_mist.jpg" width="280"> | <img src="docs/images/03_heavy_rain.jpg" width="280"> |
+| 충전구를 꽂으면 남은 시간을 계산해 쉬기를 권함 | 실내 온도를 읽고 열선부터 켬 | 돌풍, 번개 때 무드등 번쩍 |
+| **처마 밑** | **비 그친 뒤** | **충전 완료** |
+| <img src="docs/images/04_eaves.jpg" width="280"> | <img src="docs/images/05_sunlight.jpg" width="280"> | <img src="docs/images/06_finish.jpg" width="280"> |
+| 시트 열선, 무드등 주황 | 창문 10% 열기, 열선 끄기 | 충전 80%와 함께 끝나고 설정 복구 |
+
+### 엔터테인 모드 "제주 하늘 레이스" — 차의 핸들·브레이크로 조종
+
+| 캐릭터 선택 | 출발 준비 | 바다 위 비행 |
+|---|---|---|
+| <img src="docs/images/07_race_select.jpg" width="280"> | <img src="docs/images/08_race_belt.jpg" width="280"> | <img src="docs/images/09_race_sea.jpg" width="280"> |
+| 핸들로 넘기고 브레이크로 결정 | 안전벨트를 매야 출발 | 속도에 따라 바람 세기 |
+| **한라산 구름 속** | **성산일출봉 해돋이** | **결승** |
+| <img src="docs/images/10_race_cloud.jpg" width="280"> | <img src="docs/images/11_race_sunrise.jpg" width="280"> | <img src="docs/images/12_race_result.jpg" width="280"> |
+| 와이퍼, 시트 통풍, 내기 | 시트·핸들 열선, 무드등 주황 | 기록 표시, 설정 복구 |
+
 ## 제출 정보
 
 | 항목 | 내용 |
