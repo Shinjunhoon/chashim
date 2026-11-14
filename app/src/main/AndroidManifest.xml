@@ -19,10 +19,14 @@
     <uses-permission android:name="pleos.car.permission.CONTROL_WINDSHIELD_WIPERS" />
     <uses-permission android:name="pleos.car.permission.CONTROL_CAR_LIGHTS" />
 
+    <!-- 시연용: 자동 조종 값을 버추얼 콘솔(호스트 PC)에 보낸다 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
     <application
         android:label="차쉼"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
             android:name=".MainActivity"
