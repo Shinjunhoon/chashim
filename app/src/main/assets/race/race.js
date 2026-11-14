@@ -596,6 +596,7 @@
     setCharacter(CHARS[selIndex]); showSelect(false); audio.star(true);
     send({ type: 'character', id: char.id, name: char.name, ambient: char.ambient, light: char.light, confirm: true });
     toast(char.name + '와 함께 출발 준비!', char.color); st.phase = 'calib'; st.phaseT = 0;
+    if (AUTO) { st.steer = 0; st.brake = false; mirrorT = -1; mirrorAuto(); }
   }
   function showSelect(on) { $('select').style.display = on ? 'flex' : 'none'; if (on) { renderCards(); previewPick(); center('', '', ''); } }
   function selectStep() {
@@ -605,7 +606,9 @@
     lastSteerDir = dir;
     if (st.brake && !lastBrake && st.phaseT > 0.6) confirmPick();
     lastBrake = st.brake;
-    if (AUTO && st.phaseT > 1.2) confirmPick();
+    if (AUTO) {   // 시연: 핸들을 한 번 돌려 넘기고 브레이크로 결정
+      st.steer = st.phaseT > 1.0 && st.phaseT < 1.5 ? 0.9 : 0; st.brake = st.phaseT > 2.6; mirrorAuto();
+    }
   }
 
   function placeGlider(dt) {
@@ -746,6 +749,16 @@
     const drift = curvature(st.s + 10) * st.v * st.v;
     st.steer = clamp(((tx - st.x) * 0.9 + drift) / STEER_RATE, -1, 1);
     st.brake = dive;
+    mirrorAuto();
+  }
+  // 자동 조종 값을 앱에 알린다 (시연 영상에서 콘솔 핸들·브레이크가 같이 움직이도록)
+  let mirrorT = 0, mirrorDeg = null, mirrorBrake = null;
+  function mirrorAuto() {
+    if (st.t - mirrorT < 0.12) return;
+    const deg = Math.round(st.steer * 60 / 3) * 3;
+    if (deg === mirrorDeg && st.brake === mirrorBrake) return;
+    mirrorT = st.t; mirrorDeg = deg; mirrorBrake = st.brake;
+    send({ type: 'autosteer', deg, brake: st.brake });
   }
   const AUTO = Q.has('autopilot');
 

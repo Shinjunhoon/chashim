@@ -202,6 +202,7 @@ class RaceEngine(
                     _phase.value = RacePhase.Restoring
                     snapshot?.let { vehicle.restore(it) }
                     extraSnap?.let { vehicle.restoreExtras(it) }
+                    if (autopilot) mirrorConsole(0, false)
                     val score = result?.optInt("score") ?: 0
                     val best = prefs.getInt("best", 0)
                     val newBest = result != null && score > best
@@ -292,6 +293,8 @@ class RaceEngine(
                 }
                 if (e.optBoolean("confirm")) { Log.i(TAG, "race character $name"); burst(level = 2, ms = 700) }
             }
+            // 자동 조종(시연용) 값을 버추얼 콘솔에도 보내 핸들·브레이크 그림이 같이 움직이게 한다
+            "autosteer" -> if (autopilot) mirrorConsole(e.optInt("deg"), e.optBoolean("brake"))
             "finish" -> {
                 Log.i(TAG, "race finish $e")
                 finished?.complete(e)
@@ -347,6 +350,19 @@ class RaceEngine(
             effectJobs += scope.launch {
                 vehicle.setSeatHeat(lv)?.let { r -> _effects.update { it.copy(seatHeat = r, lastChanged = "seat") } }
             }
+        }
+    }
+
+    /** 시연용: 핸들·브레이크 값을 버추얼 콘솔(호스트 PC, 에뮬레이터에서 10.0.2.2)에 보낸다 */
+    private fun mirrorConsole(deg: Int, brake: Boolean) {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val url = java.net.URL("http://10.0.2.2:8088/vehicle/controls?speed=0&accelerator=0&brake=${if (brake) 60 else 0}&steering=$deg")
+                (url.openConnection() as java.net.HttpURLConnection).run {
+                    requestMethod = "PUT"; connectTimeout = 500; readTimeout = 800
+                    responseCode; disconnect()
+                }
+            }.onFailure { Log.w(TAG, "console mirror 실패 $it") }
         }
     }
 
