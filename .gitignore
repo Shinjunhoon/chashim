@@ -31,3 +31,7 @@ keystore.properties
 
 # Google Services (API 키가 들어 있음)
 google-services.json
+
+# 녹화·편집 도구 빌드 결과물 (swiftc)
+tools/screenrec
+tools/video/caption

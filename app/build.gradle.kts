@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,6 +15,25 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+    }
+    // release 서명: keystore.properties(깃에 올리지 않음)가 있을 때만 쓴다
+    val ksFile = rootProject.file("keystore.properties")
+    signingConfigs {
+        if (ksFile.exists()) {
+            val ks = Properties().apply { ksFile.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = file(ks.getProperty("storeFile"))
+                storePassword = ks.getProperty("storePassword")
+                keyAlias = ks.getProperty("keyAlias")
+                keyPassword = ks.getProperty("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            if (ksFile.exists()) signingConfig = signingConfigs.getByName("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
