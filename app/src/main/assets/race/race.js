@@ -606,8 +606,11 @@
     lastSteerDir = dir;
     if (st.brake && !lastBrake && st.phaseT > 0.6) confirmPick();
     lastBrake = st.brake;
-    if (AUTO) {   // 시연: 핸들을 한 번 돌려 넘기고 브레이크로 결정
-      st.steer = st.phaseT > 1.0 && st.phaseT < 1.5 ? 0.9 : 0; st.brake = st.phaseT > 2.6; mirrorAuto();
+    if (AUTO) {   // 시연: 핸들로 네 캐릭터를 한 바퀴 다 보여 주고, 다시 귤돌이로 와서 브레이크로 결정
+      const STEP = 1.4, PULSE = 0.45, TURNS = CHARS.length + 1;   // 바당이 → 귤돌이 → 하르방 → 종이비행기 → 바당이 → 귤돌이
+      const k = Math.floor((st.phaseT - 1.0) / STEP), inPulse = st.phaseT > 1.0 && (st.phaseT - 1.0) % STEP < PULSE;
+      st.steer = k >= 0 && k < TURNS && inPulse ? 0.9 : 0;
+      st.brake = st.phaseT > 1.0 + TURNS * STEP + 0.6; mirrorAuto();
     }
   }
 

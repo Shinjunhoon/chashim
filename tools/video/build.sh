@@ -3,10 +3,13 @@
 # 입력: ~/Desktop/차쉼_힐링_편집.mp4, ~/Desktop/차쉼_레이스_편집.mp4  출력: ~/Desktop/차쉼_시연영상.mp4
 set -e
 cd "$(dirname "$0")"
-H=~/Desktop/차쉼_힐링_편집.mp4
-R=~/Desktop/차쉼_레이스_편집.mp4
+# 녹화 원본(2940x1912)에서 바로 잘라 2560x1440으로 만든다 (편집본을 다시 압축하지 않음)
+H=~/Desktop/차쉼_힐링_1844.mov
+R=~/Desktop/차쉼_레이스_1824.mov
+export CAPTION_SCALE=1.3333333
+STACK="split[x][y];[x]crop=1466:818:1470:136[e];[y]crop=1466:680:0:1210[c];[e][c]vstack,scale=-2:1440:flags=lanczos,pad=2560:1440:(ow-iw)/2:0:color=0x0d0f14"
 T=$(mktemp -d); N=0; : > "$T/list.txt"
-ENC="-c:v libx264 -crf 20 -preset fast -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -ar 48000 -ac 2"
+ENC="-c:v libx264 -crf 16 -preset slow -tune film -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -ar 48000 -ac 2"
 
 tempo() { case $1 in 1) echo "anull";; 1.5) echo "atempo=1.5";; 2) echo "atempo=2";; 3) echo "atempo=1.5,atempo=2";; esac; }
 badge() { [ "$1" = 1 ] && echo "" || echo "▶▶ ${1}배속"; }
@@ -16,7 +19,7 @@ clip() {
   N=$((N+1)); local o="$T/$(printf %02d $N).mp4"
   ./caption "$T/c$N.png" "$5" "$6" "$7" "$(badge $4)"
   ffmpeg -v error -y -ss "$2" -to "$3" -i "$1" -i "$T/c$N.png" -filter_complex \
-    "[0:v]setpts=PTS/$4[s];[s][1:v]overlay=0:0,format=yuv420p[v];[0:a]$(tempo $4)[a]" \
+    "[0:v]$STACK,setpts=PTS/$4[s];[s][1:v]overlay=0:0,format=yuv420p[v];[0:a]volume=30dB,alimiter=limit=0.9,$(tempo $4)[a]" \
     -map "[v]" -map "[a]" $ENC "$o"
   echo "file '$o'" >> "$T/list.txt"; echo "· $6"
 }

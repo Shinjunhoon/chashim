@@ -7,6 +7,7 @@ let a = CommandLine.arguments
 let out = a[1], label = a[2], title = a[3], body = a[4].replacingOccurrences(of: "\\n", with: "\n")
 let right = a.count > 5 ? a[5] : ""
 let card = a.count > 6 && a[6] == "card"
+let S = CGFloat(Double(ProcessInfo.processInfo.environment["CAPTION_SCALE"] ?? "1") ?? 1)
 let W = 1920, H = 1080
 let accent = NSColor(red: 0.42, green: 0.86, blue: 0.69, alpha: 1)
 let text = NSColor(white: 0.96, alpha: 1), muted = NSColor(white: 0.70, alpha: 1)
@@ -18,13 +19,13 @@ func draw(_ s: String, _ f: NSFont, _ c: NSColor, _ rect: NSRect, _ align: NSTex
     let p = NSMutableParagraphStyle(); p.alignment = align; p.lineSpacing = lineGap; p.lineBreakMode = .byWordWrapping
     (s as NSString).draw(with: rect, options: [.usesLineFragmentOrigin], attributes: [.font: f, .foregroundColor: c, .paragraphStyle: p])
 }
-let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: W, pixelsHigh: H, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int((CGFloat(W) * S).rounded()), pixelsHigh: Int((CGFloat(H) * S).rounded()), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
 NSGraphicsContext.saveGraphicsState()
 let ctx = NSGraphicsContext(bitmapImageRep: rep)!
 NSGraphicsContext.current = ctx
 // 위에서 아래로 좌표를 쓰기 위해 뒤집고, 글자는 flipped 컨텍스트로 바로 세운다
 let cg = ctx.cgContext
-cg.translateBy(x: 0, y: CGFloat(H)); cg.scaleBy(x: 1, y: -1)
+cg.translateBy(x: 0, y: CGFloat(H) * S); cg.scaleBy(x: S, y: -S)
 let fctx = NSGraphicsContext(cgContext: cg, flipped: true)
 NSGraphicsContext.current = fctx
 
